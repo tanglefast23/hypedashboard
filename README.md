@@ -4,7 +4,7 @@ A public, read-only, desktop-first dashboard for the HYPE token and Hyperliquid 
 
 ## V1 scope
 
-- HYPE price, 24h change, market cap, FDV, and volume
+- HYPE price plus 5M, 30M, 1H, and 24H change, market cap, FDV, and volume
 - Interactive HYPE candle chart with 30M, 1H, 4H, 1D, 7D, and 30D timeline controls
 - Live HYPE TWAP buy pressure for the next 1h and 24h, plus active HYPE TWAP rows
 - Hyperliquid ecosystem TVL and top protocols from DefiLlama

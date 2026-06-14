@@ -17,6 +17,9 @@ export type PerpMarket = {
 
 export type HypeMarket = {
   price: number;
+  change5m: number | null;
+  change30m: number | null;
+  change1h: number | null;
   change24h: number | null;
   marketCap: number | null;
   fdv: number | null;

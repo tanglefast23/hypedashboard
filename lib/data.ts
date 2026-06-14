@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getChartRange } from "./chart-ranges";
+import { calculatePriceChangePercent } from "./price-change";
 import { buildTwapPressure, normalizeTwapRows } from "./twap";
 import type { Candle, DashboardData, EcosystemProtocol, PerpMarket } from "./types";
 
@@ -49,8 +50,12 @@ async function getHypeMarket(): Promise<DashboardData["hype"]> {
     const gecko = z.object({ market_data: z.record(z.unknown()) }).parse(await getJson(COINGECKO_URL));
     const market = gecko.market_data;
     const price = toNumber(mids.HYPE) ?? nestedUsd(market.current_price) ?? 0;
+    const changes = await getIntradayHypeChanges(price);
     return {
       price,
+      change5m: changes.change5m,
+      change30m: changes.change30m,
+      change1h: changes.change1h,
       change24h: toNumber(market.price_change_percentage_24h),
       marketCap: nestedUsd(market.market_cap),
       fdv: nestedUsd(market.fully_diluted_valuation),
@@ -62,6 +67,21 @@ async function getHypeMarket(): Promise<DashboardData["hype"]> {
 function nestedUsd(value: unknown): number | null {
   if (!value || typeof value !== "object" || !("usd" in value)) return null;
   return toNumber(value.usd);
+}
+
+async function getIntradayHypeChanges(currentPrice: number): Promise<Pick<DashboardData["hype"], "change5m" | "change30m" | "change1h">> {
+  const candles = await getCandles("1h");
+  return {
+    change5m: changeSince(currentPrice, candles, 5 * 60 * 1000),
+    change30m: changeSince(currentPrice, candles, 30 * 60 * 1000),
+    change1h: changeSince(currentPrice, candles, 60 * 60 * 1000),
+  };
+}
+
+function changeSince(currentPrice: number, candles: Candle[], lookbackMs: number): number | null {
+  const targetSeconds = (Date.now() - lookbackMs) / 1000;
+  const previous = [...candles].reverse().find((candle) => candle.time <= targetSeconds) ?? candles[0];
+  return previous ? calculatePriceChangePercent(currentPrice, previous.close) : null;
 }
 
 export async function getCandles(rangeId = "1d"): Promise<Candle[]> {

@@ -117,18 +117,21 @@ function ErrorBanner({ message }: { message: string }) {
 function HeroGrid({ data }: { data: DashboardData }) {
   const tiles = [
     { label: "HYPE Price", value: formatUsd(data.hype.price, 4), icon: TrendingUp, tone: "text-emerald-300" },
+    { label: "5M Change", value: formatPercent(data.hype.change5m), icon: Activity, tone: valueTone(data.hype.change5m) },
+    { label: "30M Change", value: formatPercent(data.hype.change30m), icon: Activity, tone: valueTone(data.hype.change30m) },
+    { label: "1H Change", value: formatPercent(data.hype.change1h), icon: Activity, tone: valueTone(data.hype.change1h) },
     { label: "24H Change", value: formatPercent(data.hype.change24h), icon: Activity, tone: valueTone(data.hype.change24h) },
     { label: "Market Cap", value: formatCompactUsd(data.hype.marketCap), icon: Database, tone: "text-slate-100" },
     { label: "24H Volume", value: formatCompactUsd(data.hype.volume24h), icon: Waves, tone: "text-slate-100" },
   ];
-  return <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{tiles.map((tile) => <MetricCard key={tile.label} {...tile} />)}</section>;
+  return <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">{tiles.map((tile) => <MetricCard key={tile.label} {...tile} />)}</section>;
 }
 
 function MetricCard({ label, value, icon: Icon, tone }: { label: string; value: string; icon: typeof Activity; tone: string }) {
   return (
     <div className="rounded-3xl border border-slate-700/50 bg-slate-950/60 p-5 shadow-2xl shadow-black/20 backdrop-blur">
       <div className="mb-6 flex items-center justify-between text-slate-400"><span className="text-sm">{label}</span><Icon className="h-5 w-5" /></div>
-      <p className={`mono text-3xl font-semibold ${tone}`}>{value}</p>
+      <p className={`mono text-2xl font-semibold xl:text-xl 2xl:text-2xl ${tone}`}>{value}</p>
     </div>
   );
 }
