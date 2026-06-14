@@ -196,7 +196,9 @@ function HypeTwapPanel({ data }: { data: DashboardData }) {
     <Card title="TWAPs HYPE Buy Pressure" action={<TwapFilterPills active={filter} onFilter={setFilter} />}>
       <div className="grid gap-5 lg:grid-cols-[minmax(220px,0.32fr)_minmax(0,0.68fr)]">
         <section className="rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+          <div className="grid grid-cols-2 gap-3">
+            <TwapStat label="Next 5m" value={signedUsd(pressure.next5m)} tone={valueTone(pressure.next5m)} />
+            <TwapStat label="Next 15m" value={signedUsd(pressure.next15m)} tone={valueTone(pressure.next15m)} />
             <TwapStat label="Next 1h" value={signedUsd(pressure.next1h)} tone={valueTone(pressure.next1h)} />
             <TwapStat label="Next 24h" value={signedUsd(pressure.next24h)} tone={valueTone(pressure.next24h)} />
           </div>
@@ -224,6 +226,8 @@ function filterTwapRows(rows: HypeTwap[], filter: TwapFilter): HypeTwap[] {
 
 function buildFilteredTwapPressure(rows: HypeTwap[]) {
   return {
+    next5m: calculateFilteredTwapPressure(rows, 5 * 60 * 1000),
+    next15m: calculateFilteredTwapPressure(rows, 15 * 60 * 1000),
     next1h: calculateFilteredTwapPressure(rows, 60 * 60 * 1000),
     next24h: calculateFilteredTwapPressure(rows, 24 * 60 * 60 * 1000),
   };
