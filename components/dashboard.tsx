@@ -4,6 +4,7 @@ import { Activity, Database, RefreshCcw, TrendingUp, Waves } from "lucide-react"
 import { useEffect, useState } from "react";
 import { getChartRangeOptions, type ChartRange } from "../lib/chart-ranges";
 import { formatCompactUsd, formatNumber, formatPercent, formatUsd } from "../lib/format";
+import { calculateTwapPlan } from "../lib/twap";
 import type { Candle, DashboardData } from "../lib/types";
 import { PriceChart } from "./price-chart";
 
@@ -38,7 +39,10 @@ export function Dashboard({ initialData }: Props) {
           <ChartToolbar chart={chart} onSelect={(range) => void loadCandles(range, setChart)} />
           <PriceChart candles={chart.candles} />
         </Card>
-        <PerpsTable data={data} />
+        <div className="grid gap-6">
+          <TwapCard price={data.hype.price} />
+          <PerpsTable data={data} />
+        </div>
       </section>
       <Ecosystem data={data} />
     </main>
@@ -137,6 +141,40 @@ function Card({ title, subtitle, children }: { title: string; subtitle: string; 
       {children}
     </section>
   );
+}
+
+function TwapCard({ price }: { price: number }) {
+  const [size, setSize] = useState(100);
+  const [minutes, setMinutes] = useState(30);
+  const plan = calculateTwapPlan({ totalSize: size, durationMinutes: minutes, price });
+  return (
+    <Card title="HYPE TWAP Planner" subtitle="Read-only estimate: Hyperliquid TWAPs send suborders every 30 seconds with 3% max slippage.">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+        <NumberField label="Total HYPE" value={size} min={0} onChange={setSize} />
+        <NumberField label="Minutes" value={minutes} min={1} max={1440} onChange={setMinutes} />
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+        <TwapStat label="Notional" value={formatCompactUsd(plan.estimatedNotional)} />
+        <TwapStat label="Slices" value={formatNumber(plan.sliceCount)} />
+        <TwapStat label="Each slice" value={`${formatNumber(plan.sliceSize)} HYPE`} />
+        <TwapStat label="Slice value" value={formatCompactUsd(plan.sliceNotional)} />
+      </div>
+      <p className="mt-4 text-xs leading-5 text-slate-500">Planner only. Actual TWAP orders/fills are wallet-specific, so v1 stays public and read-only.</p>
+    </Card>
+  );
+}
+
+function NumberField({ label, max, min, onChange, value }: { label: string; max?: number; min: number; onChange: (value: number) => void; value: number }) {
+  return (
+    <label className="text-sm text-slate-400">
+      {label}
+      <input className="mono mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-slate-100 outline-none focus:border-emerald-300" max={max} min={min} type="number" value={value} onChange={(event) => onChange(Number(event.target.value))} />
+    </label>
+  );
+}
+
+function TwapStat({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><p className="text-xs text-slate-500">{label}</p><p className="mono mt-1 text-lg font-semibold">{value}</p></div>;
 }
 
 function PerpsTable({ data }: { data: DashboardData }) {

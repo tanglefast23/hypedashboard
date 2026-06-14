@@ -6,7 +6,7 @@ A public, read-only, desktop-first dashboard for the HYPE token and Hyperliquid 
 
 - HYPE price, 24h change, market cap, FDV, and volume
 - Interactive HYPE candle chart with 30M, 1H, 4H, 1D, 7D, and 30D timeline controls
-- Top Hyperliquid perp markets by 24h volume
+- HYPE TWAP planner showing estimated slices, slice size, notional, and 30-second execution cadence
 - Hyperliquid ecosystem TVL and top protocols from DefiLlama
 - No wallet connect, auth, database, or trading actions
 
