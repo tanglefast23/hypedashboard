@@ -8,6 +8,7 @@ type SortDirection = "asc" | "desc";
 type SortState = { key: SortKey; direction: SortDirection } | null;
 type VolumeRange = "day" | "week" | "month";
 type TwapFilter = "spot" | "perps" | "combined";
+type LiveTwap = HypeTwap & { liveProgress: number; liveRemainingMs: number; liveValue: number; snapshotElapsedMs: number };
 import { FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, PERFORMANCE_TIMEFRAMES, type FlowTimeframeId, type HeaderTimeframeId, type MarketTrade } from "../lib/order-flow";
 import { formatCompactUsd, formatCompactUsdOneDecimal, formatNumber, formatPercent, formatUsd } from "../lib/format";
 import type { DashboardData, HypeTwap } from "../lib/types";
@@ -195,7 +196,9 @@ function formatElapsed(timestamp: number): string {
 
 function HypeTwapPanel({ data }: { data: DashboardData }) {
   const [filter, setFilter] = useState<TwapFilter>("combined");
-  const rows = filterTwapRows(data.twaps.rows, filter);
+  const now = useSecondTicker();
+  const snapshotTime = Date.parse(data.generatedAt);
+  const rows = filterTwapRows(data.twaps.rows, filter).map((twap) => liveTwap(twap, now, data.hype.price, snapshotTime));
   const pressure = buildFilteredTwapPressure(rows);
   return (
     <Card title="TWAPs HYPE Buy Pressure" action={<TwapFilterPills active={filter} onFilter={setFilter} />}>
@@ -223,13 +226,33 @@ function TwapFilterPills({ active, onFilter }: { active: TwapFilter; onFilter: (
   return <div className="flex flex-wrap gap-2"><button className={pillClass(active === "spot")} onClick={() => onFilter("spot")}>SPOT</button><button className={pillClass(active === "perps")} onClick={() => onFilter("perps")}>PERPS</button><button className={pillClass(active === "combined")} onClick={() => onFilter("combined")}>S+P</button></div>;
 }
 
+function useSecondTicker(): number {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return now;
+}
+
+function liveTwap(twap: HypeTwap, now: number, price: number, snapshotTime: number): LiveTwap {
+  const durationMs = Math.max(1, twap.durationMs);
+  const liveRemainingMs = Math.max(0, twap.endTime - now);
+  const liveProgress = clamp((now - twap.startTime) / durationMs, 0, 1);
+  const liveValue = twap.amount * (price > 0 ? price : twap.value / Math.max(twap.amount, 1));
+  const snapshotElapsedMs = Math.max(0, now - (Number.isFinite(snapshotTime) ? snapshotTime : now));
+  return { ...twap, liveProgress, liveRemainingMs, liveValue, snapshotElapsedMs };
+}
+
 function filterTwapRows(rows: HypeTwap[], filter: TwapFilter): HypeTwap[] {
   if (filter === "combined") return rows;
   const token = filter === "spot" ? "HYPE" : "HYPE-USD";
   return rows.filter((row) => row.token === token);
 }
 
-function buildFilteredTwapPressure(rows: HypeTwap[]) {
+function buildFilteredTwapPressure(rows: LiveTwap[]) {
   return {
     next5m: calculateFilteredTwapPressure(rows, 5 * 60 * 1000),
     next15m: calculateFilteredTwapPressure(rows, 15 * 60 * 1000),
@@ -238,10 +261,10 @@ function buildFilteredTwapPressure(rows: HypeTwap[]) {
   };
 }
 
-function calculateFilteredTwapPressure(rows: HypeTwap[], windowMs: number): number {
+function calculateFilteredTwapPressure(rows: LiveTwap[], windowMs: number): number {
   return rows.reduce((total, row) => {
-    const overlapMs = Math.max(0, Math.min(row.remainingMs, windowMs));
-    const pressure = (row.value / row.durationMs) * overlapMs;
+    const overlapMs = Math.max(0, Math.min(row.remainingMs, windowMs) - row.snapshotElapsedMs);
+    const pressure = (row.liveValue / row.durationMs) * overlapMs;
     return total + (row.side === "BUY" ? pressure : -pressure);
   }, 0);
 }
@@ -250,17 +273,26 @@ function Card({ title, action, children }: { title: string; action?: React.React
   return <section className="rounded-3xl border border-slate-700/50 bg-slate-950/60 p-5 shadow-2xl shadow-black/20 backdrop-blur"><div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><h2 className="text-xl font-semibold">{title}</h2>{action}</div>{children}</section>;
 }
 
-function TwapRow({ twap }: { twap: HypeTwap }) {
+function TwapRow({ twap }: { twap: LiveTwap }) {
   const sideTone = twap.side === "BUY" ? "text-emerald-300" : "text-rose-300";
   const progressTone = twap.side === "BUY" ? "bg-emerald-300" : "bg-rose-300";
-  return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><div className="mb-2 flex items-start justify-between gap-3"><div><span className={`mono text-xs font-semibold ${sideTone}`}>{twap.side}</span><p className="mono mt-1 text-sm text-slate-200">{twap.token}</p></div><div className="text-right"><p className="mono text-sm font-semibold">{formatCompactUsd(twap.value)}</p><p className="mono text-xs text-slate-500">{formatNumber(twap.amount)} HYPE</p></div></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-800"><div className={`h-full rounded-full ${progressTone}`} style={{ width: `${Math.round(twap.progress * 100)}%` }} /></div><div className="mt-2 flex justify-between gap-3 text-xs text-slate-500"><span className="mono">{shortAddress(twap.user)}</span><span>{formatDuration(twap.remainingMs)} left</span></div></div>;
+  return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><div className="mb-2 flex items-start justify-between gap-3"><div><span className={`mono text-xs font-semibold ${sideTone}`}>{twap.side}</span><p className="mono mt-1 text-sm text-slate-200">{twap.token}</p></div><div className="text-right"><p className="mono text-sm font-semibold transition-colors duration-300">{formatCompactUsd(twap.liveValue)}</p><p className="mono text-xs text-slate-500">{formatNumber(twap.amount)} HYPE</p></div></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-800"><div className={`h-full rounded-full transition-all duration-1000 ease-linear ${progressTone}`} style={{ width: `${Math.round(twap.liveProgress * 100)}%` }} /></div><div className="mt-2 flex justify-between gap-3 text-xs text-slate-500"><span className="mono">{shortAddress(twap.user)}</span><span>{formatDuration(twap.liveRemainingMs)} left</span></div></div>;
 }
 
 function TwapStat({ label, tone, value }: { label: string; tone: string; value: string }) {
-  return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><p className="text-xs text-slate-500">{label}</p><p className={`mono mt-1 text-2xl font-semibold ${tone}`}>{value}</p></div>;
+  return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><p className="text-xs text-slate-500">{label}</p><p className={`mono mt-1 text-2xl font-semibold transition-colors duration-300 ${tone}`}>{value}</p></div>;
 }
 
 function signedUsd(value: number): string { return `${value >= 0 ? "+" : "-"}${formatCompactUsd(Math.abs(value))}`; }
+function clamp(value: number, min: number, max: number): number { return Math.min(max, Math.max(min, value)); }
 function shortAddress(address: string): string { return address.length > 18 ? `${address.slice(0, 8)}...${address.slice(-6)}` : address; }
-function formatDuration(ms: number): string { const minutes = Math.max(0, Math.round(ms / 60_000)); if (minutes < 60) return `${minutes}m`; const hours = Math.floor(minutes / 60); const remainingMinutes = minutes % 60; return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`; }
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 1_000));
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
 function valueTone(value: number | null): string { if (value === null) return "text-slate-300"; if (value > 0) return "text-emerald-300"; if (value < 0) return "text-rose-300"; return "text-slate-300"; }
