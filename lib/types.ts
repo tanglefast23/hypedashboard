@@ -34,10 +34,32 @@ export type EcosystemTvl = {
   protocols: EcosystemProtocol[];
 };
 
+export type HypeTwap = {
+  amount: number;
+  endTime: number;
+  hash: string;
+  progress: number;
+  remainingMs: number;
+  side: "BUY" | "SELL";
+  startTime: number;
+  token: "HYPE" | "HYPE-USD";
+  user: string;
+  value: number;
+};
+
+export type HypeTwapData = {
+  pressure: {
+    next1h: number;
+    next24h: number;
+  };
+  rows: HypeTwap[];
+};
+
 export type DashboardData = {
   generatedAt: string;
   hype: HypeMarket;
   candles: Candle[];
   perps: PerpMarket[];
   ecosystem: EcosystemTvl;
+  twaps: HypeTwapData;
 };

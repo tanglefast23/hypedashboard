@@ -1,11 +1,13 @@
 import { z } from "zod";
 import { getChartRange } from "./chart-ranges";
+import { buildTwapPressure, normalizeTwapRows } from "./twap";
 import type { Candle, DashboardData, EcosystemProtocol, PerpMarket } from "./types";
 
 const HYPERLIQUID_INFO_URL = "https://api.hyperliquid.xyz/info";
 const COINGECKO_URL = "https://api.coingecko.com/api/v3/coins/hyperliquid?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false";
 const DEFILLAMA_CHAINS_URL = "https://api.llama.fi/v2/chains";
 const DEFILLAMA_PROTOCOLS_URL = "https://api.llama.fi/protocols";
+const HYPURRSCAN_TWAPS_URL = "https://api.hypurrscan.io/twap/*";
 
 type CacheEntry = { expiresAt: number; value: unknown };
 const cache = new Map<string, CacheEntry>();
@@ -90,6 +92,39 @@ function isCandle(candle: Candle | null): candle is Candle {
   return candle !== null;
 }
 
+async function getHypeTwaps(hypePrice: number): Promise<DashboardData["twaps"]> {
+  return cached("hype-twaps", 10_000, async () => {
+    const [rawRows, hypeMarketIds] = await Promise.all([getJson(HYPURRSCAN_TWAPS_URL), getHypeMarketIds()]);
+    const now = Date.now();
+    const rows = normalizeTwapRows(z.array(z.unknown()).parse(rawRows), { hypeMarketIds, hypePrice, now });
+    return { pressure: buildTwapPressure(rows, now), rows: rows.slice(0, 15) };
+  });
+}
+
+async function getHypeMarketIds(): Promise<number[]> {
+  return cached("hype-market-ids", 1_800_000, async () => {
+    const [rawMeta, rawSpotMeta] = await Promise.all([
+      postHyperliquid({ type: "meta" }),
+      postHyperliquid({ type: "spotMeta" }),
+    ]);
+    const meta = z.object({ universe: z.array(z.record(z.unknown())) }).parse(rawMeta);
+    const spotMeta = z.object({ universe: z.array(z.record(z.unknown())), tokens: z.array(z.record(z.unknown())) }).parse(rawSpotMeta);
+    const hypeTokenIds = spotMeta.tokens.filter((token) => token.name === "HYPE").map((token) => toNumber(token.index)).filter(isNumber);
+    const perpIds = meta.universe.map((market, index) => market.name === "HYPE" ? index : null).filter(isNumber);
+    const spotIds = spotMeta.universe.filter((market) => isHypeSpotMarket(market, hypeTokenIds)).map((market) => 10000 + (toNumber(market.index) ?? 0));
+    return [...new Set([...perpIds, ...spotIds])];
+  });
+}
+
+function isHypeSpotMarket(market: Record<string, unknown>, hypeTokenIds: number[]): boolean {
+  const tokens = Array.isArray(market.tokens) ? market.tokens.map(toNumber).filter(isNumber) : [];
+  return hypeTokenIds.some((id) => tokens.includes(id));
+}
+
+function isNumber(value: number | null): value is number {
+  return value !== null;
+}
+
 async function getPerps(): Promise<PerpMarket[]> {
   return cached("perps", 30_000, async () => {
     const raw = z.tuple([z.object({ universe: z.array(z.record(z.unknown())) }), z.array(z.record(z.unknown()))])
@@ -142,8 +177,9 @@ function isHyperliquidProtocol(item: Record<string, unknown>): boolean {
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
-  const [hype, candles, perps, ecosystem] = await Promise.all([
-    getHypeMarket(), getCandles(), getPerps(), getEcosystem(),
+  const hype = await getHypeMarket();
+  const [candles, perps, ecosystem, twaps] = await Promise.all([
+    getCandles(), getPerps(), getEcosystem(), getHypeTwaps(hype.price),
   ]);
-  return { generatedAt: new Date().toISOString(), hype, candles, perps, ecosystem };
+  return { generatedAt: new Date().toISOString(), hype, candles, perps, ecosystem, twaps };
 }

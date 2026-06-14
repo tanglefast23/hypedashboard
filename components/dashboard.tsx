@@ -4,8 +4,7 @@ import { Activity, Database, RefreshCcw, TrendingUp, Waves } from "lucide-react"
 import { useEffect, useState } from "react";
 import { getChartRangeOptions, type ChartRange } from "../lib/chart-ranges";
 import { formatCompactUsd, formatNumber, formatPercent, formatUsd } from "../lib/format";
-import { calculateTwapPlan } from "../lib/twap";
-import type { Candle, DashboardData } from "../lib/types";
+import type { Candle, DashboardData, HypeTwap } from "../lib/types";
 import { PriceChart } from "./price-chart";
 
 type Status = { data: DashboardData | null; error: string | null; loading: boolean };
@@ -40,7 +39,7 @@ export function Dashboard({ initialData }: Props) {
           <PriceChart candles={chart.candles} />
         </Card>
         <div className="grid gap-6">
-          <TwapCard price={data.hype.price} />
+          <HypeTwapPanel data={data} />
           <PerpsTable data={data} />
         </div>
       </section>
@@ -143,38 +142,52 @@ function Card({ title, subtitle, children }: { title: string; subtitle: string; 
   );
 }
 
-function TwapCard({ price }: { price: number }) {
-  const [size, setSize] = useState(100);
-  const [minutes, setMinutes] = useState(30);
-  const plan = calculateTwapPlan({ totalSize: size, durationMinutes: minutes, price });
+function HypeTwapPanel({ data }: { data: DashboardData }) {
   return (
-    <Card title="HYPE TWAP Planner" subtitle="Read-only estimate: Hyperliquid TWAPs send suborders every 30 seconds with 3% max slippage.">
+    <Card title="TWAPs HYPE Buy Pressure" subtitle="Live active TWAP flow from HypurrScan, filtered to HYPE spot + HYPE-USD perps.">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-        <NumberField label="Total HYPE" value={size} min={0} onChange={setSize} />
-        <NumberField label="Minutes" value={minutes} min={1} max={1440} onChange={setMinutes} />
+        <TwapStat label="Next 1h" value={signedUsd(data.twaps.pressure.next1h)} tone={valueTone(data.twaps.pressure.next1h)} />
+        <TwapStat label="Next 24h" value={signedUsd(data.twaps.pressure.next24h)} tone={valueTone(data.twaps.pressure.next24h)} />
       </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-        <TwapStat label="Notional" value={formatCompactUsd(plan.estimatedNotional)} />
-        <TwapStat label="Slices" value={formatNumber(plan.sliceCount)} />
-        <TwapStat label="Each slice" value={`${formatNumber(plan.sliceSize)} HYPE`} />
-        <TwapStat label="Slice value" value={formatCompactUsd(plan.sliceNotional)} />
+      <div className="mt-5 space-y-3">
+        <div className="flex items-center justify-between text-sm"><span className="text-slate-400">Active HYPE TWAPs</span><span className="mono text-slate-500">{data.twaps.rows.length}</span></div>
+        {data.twaps.rows.length ? data.twaps.rows.map((twap) => <TwapRow key={twap.hash} twap={twap} />) : <p className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-500">No active HYPE TWAPs right now.</p>}
       </div>
-      <p className="mt-4 text-xs leading-5 text-slate-500">Planner only. Actual TWAP orders/fills are wallet-specific, so v1 stays public and read-only.</p>
     </Card>
   );
 }
 
-function NumberField({ label, max, min, onChange, value }: { label: string; max?: number; min: number; onChange: (value: number) => void; value: number }) {
+function TwapRow({ twap }: { twap: HypeTwap }) {
   return (
-    <label className="text-sm text-slate-400">
-      {label}
-      <input className="mono mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-slate-100 outline-none focus:border-emerald-300" max={max} min={min} type="number" value={value} onChange={(event) => onChange(Number(event.target.value))} />
-    </label>
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3">
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <div><span className={`mono text-xs font-semibold ${twap.side === "BUY" ? "text-emerald-300" : "text-rose-300"}`}>{twap.side}</span><p className="mono mt-1 text-sm text-slate-200">{twap.token}</p></div>
+        <div className="text-right"><p className="mono text-sm font-semibold">{formatCompactUsd(twap.value)}</p><p className="mono text-xs text-slate-500">{formatNumber(twap.amount)} HYPE</p></div>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.round(twap.progress * 100)}%` }} /></div>
+      <div className="mt-2 flex justify-between gap-3 text-xs text-slate-500"><span className="mono">{shortAddress(twap.user)}</span><span>{formatDuration(twap.remainingMs)} left</span></div>
+    </div>
   );
 }
 
-function TwapStat({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><p className="text-xs text-slate-500">{label}</p><p className="mono mt-1 text-lg font-semibold">{value}</p></div>;
+function TwapStat({ label, tone, value }: { label: string; tone: string; value: string }) {
+  return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><p className="text-xs text-slate-500">{label}</p><p className={`mono mt-1 text-2xl font-semibold ${tone}`}>{value}</p></div>;
+}
+
+function signedUsd(value: number): string {
+  return `${value >= 0 ? "+" : "-"}${formatCompactUsd(Math.abs(value))}`;
+}
+
+function shortAddress(address: string): string {
+  return address.length > 18 ? `${address.slice(0, 8)}...${address.slice(-6)}` : address;
+}
+
+function formatDuration(ms: number): string {
+  const minutes = Math.max(0, Math.round(ms / 60_000));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
 }
 
 function PerpsTable({ data }: { data: DashboardData }) {
