@@ -1,4 +1,4 @@
-import type { FlowTimeframeId, HeaderTimeframeId, HourlyVolumeBar, LimitOrderLevel, MarketTrade, TimeframeId } from "./order-flow";
+import type { FlowTimeframeId, HeaderTimeframeId, LimitOrderLevel, MarketTrade, TimeframeId, VolumeBar } from "./order-flow";
 
 export type Candle = {
   time: number;
@@ -46,7 +46,8 @@ export type VenueOrderFlowData = {
 };
 
 export type OrderFlowData = {
-  hourlyVolume: HourlyVolumeBar[];
+  hourlyVolume: VolumeBar[];
+  dailyVolume: VolumeBar[];
   perps: VenueOrderFlowData;
   spot: VenueOrderFlowData;
 };

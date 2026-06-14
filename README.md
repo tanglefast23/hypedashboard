@@ -7,7 +7,7 @@ A public, read-only, desktop-first dashboard for HYPE token flow and Hyperliquid
 - Header shows `HYPE` beside the live price
 - First row: 5M, 15M, 30M, 1H, 4H, 12H, and 1D percentage change
 - Second row: volume for the same time periods
-- 24 hourly volume bars for the past day
+- HYPE volume chart with Day and Month pills: Day shows 24 hourly bars; Month shows 30 daily bars
 - Separate HYPE perps and HYPE/USDC spot limit buy/sell book panels with timeframe pills
 - Separate HYPE perps and HYPE/USDC spot recent market buy/sell trade panels with timeframe pills
 - Live HYPE TWAP buy pressure for the next 1h and 24h, plus active HYPE TWAP rows

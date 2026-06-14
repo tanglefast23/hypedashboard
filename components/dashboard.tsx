@@ -7,6 +7,7 @@ type SortKey = "date" | "price" | "size" | "value";
 type SortDirection = "asc" | "desc";
 type SortState = { key: SortKey; direction: SortDirection } | null;
 type SeenMap = Record<string, number>;
+type VolumeRange = "day" | "month";
 import { FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, PERFORMANCE_TIMEFRAMES, type FlowTimeframeId, type HeaderTimeframeId, type LimitOrderLevel, type MarketTrade } from "../lib/order-flow";
 import { formatCompactUsd, formatCompactUsdOneDecimal, formatNumber, formatPercent, formatUsd } from "../lib/format";
 import type { DashboardData, HypeTwap } from "../lib/types";
@@ -19,6 +20,7 @@ export function Dashboard({ initialData }: Props) {
   const [status, setStatus] = useState<Status>({ data: initialData, error: null, loading: false });
   const [limitFrame, setLimitFrame] = useState<FlowTimeframeId>("5m");
   const [marketFrame, setMarketFrame] = useState<FlowTimeframeId>("5m");
+  const [volumeRange, setVolumeRange] = useState<VolumeRange>("day");
   const [seenMap, setSeenMap] = useState<SeenMap>(() => addLimitRowsToSeenMap({}, initialData));
 
   useEffect(() => {
@@ -33,7 +35,7 @@ export function Dashboard({ initialData }: Props) {
       <Header data={data} loading={status.loading} onRefresh={() => void refresh(setStatus, setSeenMap)} />
       {status.error ? <ErrorBanner message={status.error} /> : null}
       <PerformanceGrid data={data} />
-      <VolumeBarChart data={data} />
+      <VolumeBarChart data={data} range={volumeRange} onRange={setVolumeRange} />
       <section className="grid gap-6 xl:grid-cols-2">
         <OrderFlowCard frame={limitFrame} kind="limit" onFrame={setLimitFrame} seenMap={seenMap} title="Perps Limit Buys / Sells" buys={data.orderFlow.perps.limitBook[limitFrame].buys} sells={data.orderFlow.perps.limitBook[limitFrame].sells} venue="HYPE perps" />
         <OrderFlowCard frame={limitFrame} kind="limit" onFrame={setLimitFrame} seenMap={seenMap} title="Spot Limit Buys / Sells" buys={data.orderFlow.spot.limitBook[limitFrame].buys} sells={data.orderFlow.spot.limitBook[limitFrame].sells} venue="HYPE/USDC spot" />
@@ -104,14 +106,20 @@ function MetricTile({ label, tone, value }: { label: string; tone: string; value
   return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4"><p className="text-xs uppercase tracking-[0.18em] text-slate-500">{label}</p><p className={`mono mt-2 text-xl font-semibold ${tone}`}>{value}</p></div>;
 }
 
-function VolumeBarChart({ data }: { data: DashboardData }) {
-  const max = Math.max(...data.orderFlow.hourlyVolume.map((bar) => bar.volumeUsd), 1);
+function VolumeBarChart({ data, onRange, range }: { data: DashboardData; onRange: (range: VolumeRange) => void; range: VolumeRange }) {
+  const bars = range === "day" ? data.orderFlow.hourlyVolume : data.orderFlow.dailyVolume;
+  const max = Math.max(...bars.map((bar) => bar.volumeUsd), 1);
+  const subtitle = range === "day" ? "Last 24 one-hour bars from Hyperliquid candles." : "Last 30 daily bars from Hyperliquid candles.";
   return (
     <section className="rounded-3xl border border-slate-700/50 bg-slate-950/60 p-5 shadow-2xl shadow-black/20 backdrop-blur">
-      <div className="mb-4"><h2 className="text-xl font-semibold">Hourly HYPE Volume</h2><p className="mt-1 text-sm text-slate-400">Last 24 one-hour bars from Hyperliquid candles.</p></div>
-      <div className="flex h-52 items-end gap-1 sm:gap-2">{data.orderFlow.hourlyVolume.map((bar) => <div className="group flex h-full min-w-0 flex-1 flex-col justify-end gap-2" key={bar.label}><div className="flex min-h-0 flex-1 items-end"><div className="w-full rounded-t bg-emerald-300/70 transition group-hover:bg-emerald-200" style={{ height: `${Math.max(4, (bar.volumeUsd / max) * 100)}%` }} title={`${bar.label}:00 ${formatCompactUsdOneDecimal(bar.volumeUsd)}`} /></div><span className="mono hidden text-center text-[10px] text-slate-500 sm:block">{bar.label}</span></div>)}</div>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-semibold">HYPE Volume</h2><p className="mt-1 text-sm text-slate-400">{subtitle}</p></div><VolumeRangePills active={range} onRange={onRange} /></div>
+      <div className="flex h-52 items-end gap-1 sm:gap-2">{bars.map((bar, index) => <div className="group flex h-full min-w-0 flex-1 flex-col justify-end gap-2" key={`${bar.label}-${index}`}><div className="flex min-h-0 flex-1 items-end"><div className="w-full rounded-t bg-emerald-300/70 transition group-hover:bg-emerald-200" style={{ height: `${Math.max(4, (bar.volumeUsd / max) * 100)}%` }} title={`${bar.label} ${formatCompactUsdOneDecimal(bar.volumeUsd)}`} /></div><span className="mono hidden text-center text-[10px] text-slate-500 sm:block">{bar.label}</span></div>)}</div>
     </section>
   );
+}
+
+function VolumeRangePills({ active, onRange }: { active: VolumeRange; onRange: (range: VolumeRange) => void }) {
+  return <div className="flex gap-2"><button className={pillClass(active === "day")} onClick={() => onRange("day")}>Day</button><button className={pillClass(active === "month")} onClick={() => onRange("month")}>Month</button></div>;
 }
 
 function OrderFlowCard({ buys, frame, kind, onFrame, seenMap, sells, title, venue }: { buys: LimitOrderLevel[] | MarketTrade[]; frame: FlowTimeframeId; kind: "limit" | "market"; onFrame: (frame: FlowTimeframeId) => void; seenMap: SeenMap; sells: LimitOrderLevel[] | MarketTrade[]; title: string; venue: string }) {

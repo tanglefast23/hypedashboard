@@ -16,11 +16,13 @@ export type MarketTrade = {
   value: number;
 };
 
-export type HourlyVolumeBar = {
+export type VolumeBar = {
   label: string;
   volume: number;
   volumeUsd: number;
 };
+
+export type HourlyVolumeBar = VolumeBar;
 
 export const PERFORMANCE_TIMEFRAMES: { id: TimeframeId; label: string; durationMs: number }[] = [
   { id: "5m", label: "5M", durationMs: 5 * 60_000 },
@@ -63,6 +65,21 @@ export function buildHourlyVolumeBars(candles: { time: number; volume: number }[
     const volume = candles.filter((candle) => candle.time * 1000 >= hourMs && candle.time * 1000 < nextHourMs).reduce((sum, candle) => sum + candle.volume, 0);
     return { label: new Date(hourMs).getHours().toString().padStart(2, "0"), volume, volumeUsd: volume * price };
   });
+}
+
+export function buildDailyVolumeBars(candles: { close: number; time: number; volume: number }[]): HourlyVolumeBar[] {
+  return candles.slice(-30).map((candle) => ({
+    label: formatDayLabel(candle.time),
+    volume: candle.volume,
+    volumeUsd: candle.volume * candle.close,
+  }));
+}
+
+function formatDayLabel(timeSeconds: number): string {
+  const date = new Date(timeSeconds * 1000);
+  const day = date.getUTCDate();
+  if (day !== 1) return String(day);
+  return `${date.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} 1`;
 }
 
 function readLevels(raw: unknown): [unknown[], unknown[]] {

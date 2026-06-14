@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { buildHourlyVolumeBars, buildMarketFlow, FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, normalizeL2Book, PERFORMANCE_TIMEFRAMES } from "./order-flow";
+import { buildDailyVolumeBars, buildHourlyVolumeBars, buildMarketFlow, FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, normalizeL2Book, PERFORMANCE_TIMEFRAMES } from "./order-flow";
 import type { HeaderTimeframeId, TimeframeId } from "./order-flow";
 import { calculatePriceChangePercent } from "./price-change";
 import { buildTwapPressure, normalizeTwapRows } from "./twap";
@@ -109,6 +109,15 @@ async function getHypeCandles7d(): Promise<Candle[]> {
   });
 }
 
+async function getHypeCandles30d(): Promise<Candle[]> {
+  return cached("hype-candles-30d-1d", 300_000, async () => {
+    const endTime = Date.now();
+    const startTime = endTime - 30 * 24 * 60 * 60 * 1000;
+    const raw = await postHyperliquid({ type: "candleSnapshot", req: { coin: "HYPE", interval: "1d", startTime, endTime } });
+    return z.array(z.record(z.unknown())).parse(raw).map(parseCandle).filter(isCandle);
+  });
+}
+
 function parseCandle(row: Record<string, unknown>): Candle | null {
   const time = toNumber(row.t);
   const open = toNumber(row.o);
@@ -150,7 +159,7 @@ function isHypeSpotMarket(market: Record<string, unknown>, hypeTokenIds: number[
 
 function isNumber(value: number | null): value is number { return value !== null; }
 
-async function getOrderFlow(price: number, candles: Candle[]): Promise<DashboardData["orderFlow"]> {
+async function getOrderFlow(price: number, candles: Candle[], monthlyCandles: Candle[]): Promise<DashboardData["orderFlow"]> {
   return cached("order-flow-v2", 30_000, async () => {
     const [perpBook, perpTrades, spotBook, spotTrades] = await Promise.all([
       getVenueOrderFlow("HYPE", price),
@@ -160,6 +169,7 @@ async function getOrderFlow(price: number, candles: Candle[]): Promise<Dashboard
     ]);
     return {
       hourlyVolume: buildHourlyVolumeBars(candles, price),
+      dailyVolume: buildDailyVolumeBars(monthlyCandles),
       perps: buildVenueFlow(perpBook, z.array(z.unknown()).parse(perpTrades)),
       spot: buildVenueFlow(spotBook, z.array(z.unknown()).parse(spotTrades)),
     };
@@ -180,8 +190,8 @@ function buildVenueFlow(book: ReturnType<typeof normalizeL2Book>, trades: unknow
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
-  const [candles, weeklyCandles] = await Promise.all([getHypeCandles24h(), getHypeCandles7d()]);
+  const [candles, weeklyCandles, monthlyCandles] = await Promise.all([getHypeCandles24h(), getHypeCandles7d(), getHypeCandles30d()]);
   const hype = await getHypeMarket(candles, weeklyCandles);
-  const [twaps, orderFlow] = await Promise.all([getHypeTwaps(hype.price), getOrderFlow(hype.price, candles)]);
+  const [twaps, orderFlow] = await Promise.all([getHypeTwaps(hype.price), getOrderFlow(hype.price, candles, monthlyCandles)]);
   return { generatedAt: new Date().toISOString(), hype, twaps, orderFlow };
 }
