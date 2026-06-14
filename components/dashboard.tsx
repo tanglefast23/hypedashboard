@@ -99,7 +99,7 @@ function VolumeBarChart({ data }: { data: DashboardData }) {
   return (
     <section className="rounded-3xl border border-slate-700/50 bg-slate-950/60 p-5 shadow-2xl shadow-black/20 backdrop-blur">
       <div className="mb-4"><h2 className="text-xl font-semibold">Hourly HYPE Volume</h2><p className="mt-1 text-sm text-slate-400">Last 24 one-hour bars from Hyperliquid candles.</p></div>
-      <div className="flex h-52 items-end gap-1 sm:gap-2">{data.orderFlow.hourlyVolume.map((bar) => <div className="group flex min-w-0 flex-1 flex-col items-center gap-2" key={bar.label}><div className="w-full rounded-t bg-emerald-300/70 transition group-hover:bg-emerald-200" style={{ height: `${Math.max(4, (bar.volumeUsd / max) * 100)}%` }} title={`${bar.label}:00 ${formatCompactUsd(bar.volumeUsd)}`} /><span className="mono hidden text-[10px] text-slate-500 sm:block">{bar.label}</span></div>)}</div>
+      <div className="flex h-52 items-end gap-1 sm:gap-2">{data.orderFlow.hourlyVolume.map((bar) => <div className="group flex h-full min-w-0 flex-1 flex-col justify-end gap-2" key={bar.label}><div className="flex min-h-0 flex-1 items-end"><div className="w-full rounded-t bg-emerald-300/70 transition group-hover:bg-emerald-200" style={{ height: `${Math.max(4, (bar.volumeUsd / max) * 100)}%` }} title={`${bar.label}:00 ${formatCompactUsd(bar.volumeUsd)}`} /></div><span className="mono hidden text-center text-[10px] text-slate-500 sm:block">{bar.label}</span></div>)}</div>
     </section>
   );
 }
