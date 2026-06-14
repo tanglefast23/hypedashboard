@@ -1,19 +1,28 @@
 # HYPE Dashboard
 
-A public, read-only, desktop-first dashboard for the HYPE token and Hyperliquid activity.
+A public, read-only, desktop-first dashboard for HYPE token flow and Hyperliquid activity.
 
 ## V1 scope
 
-- HYPE price plus 5M, 30M, 1H, and 24H change, market cap, FDV, and volume
+- Header shows `HYPE` beside the live price
+- First row: 5M, 15M, 30M, 1H, 4H, 12H, and 1D percentage change
+- Second row: volume for the same time periods
+- 24 hourly volume bars for the past day
+- Top 15 HYPE limit buys/sells with timeframe pills
+- Top 15 HYPE market buys/sells with timeframe pills
 - Live HYPE TWAP buy pressure for the next 1h and 24h, plus active HYPE TWAP rows
-- Top Hyperliquid perp markets by 24H notional volume
 - No wallet connect, auth, database, or trading actions
 
 ## Data sources
 
-- Hyperliquid public API: `https://api.hyperliquid.xyz/info`
+- Hyperliquid public API primary: `https://api.hyperliquid.xyz/info`
+- Hyperliquid UI API fallback: `https://api-ui.hyperliquid.xyz/info`
 - CoinGecko public API: `https://api.coingecko.com/api/v3/coins/hyperliquid`
 - HypurrScan TWAP feed: `https://api.hypurrscan.io/twap/*`
+
+## Refresh / rate limits
+
+The dashboard refreshes every 30 seconds and Vercel caches `/api/dashboard` for 30 seconds with 90 seconds stale-while-revalidate. This keeps the UI fresh without hammering Hyperliquid's public API.
 
 ## Local development
 

@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { getChartRange } from "./chart-ranges";
+import { buildHourlyVolumeBars, buildMarketFlow, FLOW_TIMEFRAMES, normalizeL2Book, PERFORMANCE_TIMEFRAMES } from "./order-flow";
+import type { FlowTimeframeId, TimeframeId } from "./order-flow";
 import { calculatePriceChangePercent } from "./price-change";
 import { buildTwapPressure, normalizeTwapRows } from "./twap";
-import type { Candle, DashboardData, PerpMarket } from "./types";
+import type { Candle, DashboardData } from "./types";
 
-const HYPERLIQUID_INFO_URL = "https://api.hyperliquid.xyz/info";
+const HYPERLIQUID_INFO_URLS = ["https://api.hyperliquid.xyz/info", "https://api-ui.hyperliquid.xyz/info"];
 const COINGECKO_URL = "https://api.coingecko.com/api/v3/coins/hyperliquid?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false";
 const HYPURRSCAN_TWAPS_URL = "https://api.hypurrscan.io/twap/*";
 
@@ -27,13 +28,15 @@ async function cached<T>(key: string, ttlMs: number, loader: () => Promise<T>): 
 }
 
 async function postHyperliquid(body: Record<string, unknown>): Promise<unknown> {
-  const response = await fetch(HYPERLIQUID_INFO_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) throw new Error(`Hyperliquid API failed: ${response.status}`);
-  return response.json();
+  let lastError: unknown = null;
+  for (const url of HYPERLIQUID_INFO_URLS) {
+    try {
+      const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      if (response.ok) return response.json();
+      lastError = new Error(`Hyperliquid API failed: ${response.status}`);
+    } catch (error) { lastError = error; }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Hyperliquid API failed");
 }
 
 async function getJson(url: string): Promise<unknown> {
@@ -42,23 +45,21 @@ async function getJson(url: string): Promise<unknown> {
   return response.json();
 }
 
-async function getHypeMarket(): Promise<DashboardData["hype"]> {
+async function getHypeMarket(priceCandles: Candle[]): Promise<DashboardData["hype"]> {
   return cached("hype-market", 30_000, async () => {
-    const mids = z.record(z.string()).parse(await postHyperliquid({ type: "allMids" }));
-    const gecko = z.object({ market_data: z.record(z.unknown()) }).parse(await getJson(COINGECKO_URL));
+    const [midsRaw, geckoRaw] = await Promise.all([postHyperliquid({ type: "allMids" }), getJson(COINGECKO_URL)]);
+    const mids = z.record(z.string()).parse(midsRaw);
+    const gecko = z.object({ market_data: z.record(z.unknown()) }).parse(geckoRaw);
     const market = gecko.market_data;
     const price = toNumber(mids.HYPE) ?? nestedUsd(market.current_price) ?? 0;
-    const changes = await getIntradayHypeChanges(price);
     return {
       price,
-      change5m: changes.change5m,
-      change30m: changes.change30m,
-      change1h: changes.change1h,
-      change24h: toNumber(market.price_change_percentage_24h),
+      changes: getPriceChanges(price, priceCandles),
+      volumes: getVolumes(priceCandles, price),
       marketCap: nestedUsd(market.market_cap),
       fdv: nestedUsd(market.fully_diluted_valuation),
       volume24h: nestedUsd(market.total_volume),
-    };
+    } as DashboardData["hype"];
   });
 }
 
@@ -67,13 +68,16 @@ function nestedUsd(value: unknown): number | null {
   return toNumber(value.usd);
 }
 
-async function getIntradayHypeChanges(currentPrice: number): Promise<Pick<DashboardData["hype"], "change5m" | "change30m" | "change1h">> {
-  const candles = await getCandles("1h");
-  return {
-    change5m: changeSince(currentPrice, candles, 5 * 60 * 1000),
-    change30m: changeSince(currentPrice, candles, 30 * 60 * 1000),
-    change1h: changeSince(currentPrice, candles, 60 * 60 * 1000),
-  };
+function getPriceChanges(currentPrice: number, candles: Candle[]): Record<TimeframeId, number | null> {
+  return Object.fromEntries(PERFORMANCE_TIMEFRAMES.map((frame) => [frame.id, changeSince(currentPrice, candles, frame.durationMs)])) as Record<TimeframeId, number | null>;
+}
+
+function getVolumes(candles: Candle[], currentPrice: number): Record<TimeframeId, number | null> {
+  const now = Date.now() / 1000;
+  return Object.fromEntries(PERFORMANCE_TIMEFRAMES.map((frame) => {
+    const volume = candles.filter((candle) => now - candle.time <= frame.durationMs / 1000).reduce((sum, candle) => sum + candle.volume, 0);
+    return [frame.id, volume * currentPrice];
+  })) as Record<TimeframeId, number | null>;
 }
 
 function changeSince(currentPrice: number, candles: Candle[], lookbackMs: number): number | null {
@@ -82,15 +86,11 @@ function changeSince(currentPrice: number, candles: Candle[], lookbackMs: number
   return previous ? calculatePriceChangePercent(currentPrice, previous.close) : null;
 }
 
-export async function getCandles(rangeId = "1d"): Promise<Candle[]> {
-  const range = getChartRange(rangeId);
-  return cached(`hype-candles-${range.id}`, 15_000, async () => {
+async function getHypeCandles24h(): Promise<Candle[]> {
+  return cached("hype-candles-24h-1m", 30_000, async () => {
     const endTime = Date.now();
-    const startTime = endTime - range.durationMs;
-    const raw = await postHyperliquid({
-      type: "candleSnapshot",
-      req: { coin: "HYPE", interval: range.interval, startTime, endTime },
-    });
+    const startTime = endTime - 24 * 60 * 60 * 1000;
+    const raw = await postHyperliquid({ type: "candleSnapshot", req: { coin: "HYPE", interval: "1m", startTime, endTime } });
     return z.array(z.record(z.unknown())).parse(raw).map(parseCandle).filter(isCandle);
   });
 }
@@ -106,12 +106,10 @@ function parseCandle(row: Record<string, unknown>): Candle | null {
   return { time: time / 1000, open, high, low, close, volume };
 }
 
-function isCandle(candle: Candle | null): candle is Candle {
-  return candle !== null;
-}
+function isCandle(candle: Candle | null): candle is Candle { return candle !== null; }
 
 async function getHypeTwaps(hypePrice: number): Promise<DashboardData["twaps"]> {
-  return cached("hype-twaps", 10_000, async () => {
+  return cached("hype-twaps", 30_000, async () => {
     const [rawRows, hypeMarketIds] = await Promise.all([getJson(HYPURRSCAN_TWAPS_URL), getHypeMarketIds()]);
     const now = Date.now();
     const rows = normalizeTwapRows(z.array(z.unknown()).parse(rawRows), { hypeMarketIds, hypePrice, now });
@@ -121,10 +119,7 @@ async function getHypeTwaps(hypePrice: number): Promise<DashboardData["twaps"]> 
 
 async function getHypeMarketIds(): Promise<number[]> {
   return cached("hype-market-ids", 1_800_000, async () => {
-    const [rawMeta, rawSpotMeta] = await Promise.all([
-      postHyperliquid({ type: "meta" }),
-      postHyperliquid({ type: "spotMeta" }),
-    ]);
+    const [rawMeta, rawSpotMeta] = await Promise.all([postHyperliquid({ type: "meta" }), postHyperliquid({ type: "spotMeta" })]);
     const meta = z.object({ universe: z.array(z.record(z.unknown())) }).parse(rawMeta);
     const spotMeta = z.object({ universe: z.array(z.record(z.unknown())), tokens: z.array(z.record(z.unknown())) }).parse(rawSpotMeta);
     const hypeTokenIds = spotMeta.tokens.filter((token) => token.name === "HYPE").map((token) => toNumber(token.index)).filter(isNumber);
@@ -139,37 +134,28 @@ function isHypeSpotMarket(market: Record<string, unknown>, hypeTokenIds: number[
   return hypeTokenIds.some((id) => tokens.includes(id));
 }
 
-function isNumber(value: number | null): value is number {
-  return value !== null;
-}
+function isNumber(value: number | null): value is number { return value !== null; }
 
-async function getPerps(): Promise<PerpMarket[]> {
-  return cached("perps", 30_000, async () => {
-    const raw = z.tuple([z.object({ universe: z.array(z.record(z.unknown())) }), z.array(z.record(z.unknown()))])
-      .parse(await postHyperliquid({ type: "metaAndAssetCtxs" }));
-    return raw[0].universe.map((market, index) => parsePerp(market, raw[1][index])).filter(isPerpMarket)
-      .sort((a, b) => b.volume24h - a.volume24h).slice(0, 10);
+async function getOrderFlow(price: number, candles: Candle[]): Promise<DashboardData["orderFlow"]> {
+  return cached("order-flow", 30_000, async () => {
+    const [bookRaw, tradesRaw] = await Promise.all([
+      postHyperliquid({ type: "l2Book", coin: "HYPE" }),
+      postHyperliquid({ type: "recentTrades", coin: "HYPE" }),
+    ]);
+    const book = normalizeL2Book(bookRaw, price);
+    const trades = z.array(z.unknown()).parse(tradesRaw);
+    const now = Date.now();
+    return {
+      hourlyVolume: buildHourlyVolumeBars(candles, price),
+      limitBook: Object.fromEntries(FLOW_TIMEFRAMES.map((frame) => [frame.id, book])) as Record<FlowTimeframeId, typeof book>,
+      marketTrades: Object.fromEntries(FLOW_TIMEFRAMES.map((frame) => [frame.id, buildMarketFlow(trades, frame.durationMs, now)])) as DashboardData["orderFlow"]["marketTrades"],
+    };
   });
 }
 
-function parsePerp(meta: Record<string, unknown>, ctx: Record<string, unknown> | undefined): PerpMarket | null {
-  if (!ctx || typeof meta.name !== "string") return null;
-  const markPrice = toNumber(ctx.markPx);
-  const openInterest = toNumber(ctx.openInterest);
-  const volume24h = toNumber(ctx.dayNtlVlm);
-  const fundingRate = toNumber(ctx.funding);
-  if (markPrice === null || openInterest === null || volume24h === null || fundingRate === null) return null;
-  return { name: meta.name, markPrice, openInterest, volume24h, fundingRate: fundingRate * 100 };
-}
-
-function isPerpMarket(market: PerpMarket | null): market is PerpMarket {
-  return market !== null;
-}
-
 export async function getDashboardData(): Promise<DashboardData> {
-  const hype = await getHypeMarket();
-  const [candles, perps, twaps] = await Promise.all([
-    getCandles(), getPerps(), getHypeTwaps(hype.price),
-  ]);
-  return { generatedAt: new Date().toISOString(), hype, candles, perps, twaps };
+  const candles = await getHypeCandles24h();
+  const hype = await getHypeMarket(candles);
+  const [twaps, orderFlow] = await Promise.all([getHypeTwaps(hype.price), getOrderFlow(hype.price, candles)]);
+  return { generatedAt: new Date().toISOString(), hype, twaps, orderFlow };
 }

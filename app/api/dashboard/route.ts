@@ -6,7 +6,7 @@ export async function GET() {
     const data = await getDashboardData();
     return NextResponse.json(data, {
       headers: {
-        "Cache-Control": "s-maxage=15, stale-while-revalidate=45",
+        "Cache-Control": "s-maxage=30, stale-while-revalidate=90",
       },
     });
   } catch (error) {

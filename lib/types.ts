@@ -1,3 +1,5 @@
+import type { FlowTimeframeId, HourlyVolumeBar, LimitOrderLevel, MarketTrade, TimeframeId } from "./order-flow";
+
 export type Candle = {
   time: number;
   open: number;
@@ -7,20 +9,10 @@ export type Candle = {
   volume: number;
 };
 
-export type PerpMarket = {
-  name: string;
-  markPrice: number;
-  openInterest: number;
-  volume24h: number;
-  fundingRate: number;
-};
-
 export type HypeMarket = {
   price: number;
-  change5m: number | null;
-  change30m: number | null;
-  change1h: number | null;
-  change24h: number | null;
+  changes: Record<TimeframeId, number | null>;
+  volumes: Record<TimeframeId, number | null>;
   marketCap: number | null;
   fdv: number | null;
   volume24h: number | null;
@@ -47,10 +39,15 @@ export type HypeTwapData = {
   rows: HypeTwap[];
 };
 
+export type OrderFlowData = {
+  hourlyVolume: HourlyVolumeBar[];
+  limitBook: Record<FlowTimeframeId, { buys: LimitOrderLevel[]; sells: LimitOrderLevel[] }>;
+  marketTrades: Record<FlowTimeframeId, { buys: MarketTrade[]; sells: MarketTrade[] }>;
+};
+
 export type DashboardData = {
   generatedAt: string;
   hype: HypeMarket;
-  candles: Candle[];
-  perps: PerpMarket[];
   twaps: HypeTwapData;
+  orderFlow: OrderFlowData;
 };
