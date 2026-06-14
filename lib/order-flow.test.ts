@@ -13,16 +13,29 @@ describe("order flow helpers", () => {
     expect(book.buys[0]).toMatchObject({ price: 100, size: 1, value: 100, orders: 2 });
   });
 
-  it("builds market buy and sell rows for the selected time window", () => {
+  it("builds market buy and sell rows for the selected time window sorted by value", () => {
     const trades = [
       { side: "B", px: "10", sz: "2", time: now - 60_000, tid: 1 },
       { side: "A", px: "20", sz: "3", time: now - 2 * 60_000, tid: 2 },
       { side: "B", px: "30", sz: "4", time: now - 10 * 60_000, tid: 3 },
+      { side: "B", px: "5", sz: "9", time: now - 3 * 60_000, tid: 4 },
     ];
 
     const flow = buildMarketFlow(trades, 5 * 60_000, now);
-    expect(flow.buys).toEqual([{ price: 10, size: 2, time: now - 60_000, value: 20 }]);
+    expect(flow.buys).toEqual([
+      { price: 5, size: 9, time: now - 3 * 60_000, value: 45 },
+      { price: 10, size: 2, time: now - 60_000, value: 20 },
+    ]);
     expect(flow.sells).toEqual([{ price: 20, size: 3, time: now - 2 * 60_000, value: 60 }]);
+  });
+
+  it("limits each trade side to the top 50 values", () => {
+    const trades = Array.from({ length: 60 }, (_, i) => ({ side: "B" as const, px: String(i + 1), sz: "1", time: now - 60_000, tid: i }));
+    const flow = buildMarketFlow(trades, 5 * 60_000, now);
+
+    expect(flow.buys).toHaveLength(50);
+    expect(flow.buys[0].value).toBe(60);
+    expect(flow.buys[49].value).toBe(11);
   });
 
   it("builds filled limit buy and sell rows from the maker side of trades", () => {

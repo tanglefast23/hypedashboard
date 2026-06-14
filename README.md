@@ -8,8 +8,8 @@ A public, read-only, desktop-first dashboard for HYPE token flow and Hyperliquid
 - First row: 5M, 15M, 30M, 1H, 4H, 12H, and 1D percentage change
 - Second row: volume for the same time periods
 - HYPE volume chart with Day, Week, and Month pills: Day shows 24 hourly bars; Week shows 7 daily bars; Month shows 30 daily bars
-- Separate HYPE perps and HYPE/USDC spot market buy/sell trade panels with timeframe pills
-- Separate HYPE perps and HYPE/USDC spot filled limit buy/sell panels inferred from completed trades
+- Separate HYPE perps and HYPE/USDC spot market buy/sell trade panels with timeframe pills; each side shows the top 50 trades by USD value with scrolling after 10 rows
+- Separate HYPE perps and HYPE/USDC spot filled limit buy/sell panels inferred from completed trades; each side shows the top 50 fills by USD value with scrolling after 10 rows
 - Live HYPE TWAP buy pressure with SPOT / PERPS / S+P filters, Next 5m/15m/1h/24h flow, plus a scrollable active TWAP section
 - No wallet connect, auth, database, or trading actions
 

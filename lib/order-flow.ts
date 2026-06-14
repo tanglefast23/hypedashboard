@@ -51,17 +51,21 @@ export function normalizeL2Book(raw: unknown, fallbackPrice: number): { buys: Li
 export function buildMarketFlow(rawTrades: unknown[], windowMs: number, now: number): { buys: MarketTrade[]; sells: MarketTrade[] } {
   const trades = parseWindowTrades(rawTrades, windowMs, now);
   return {
-    buys: trades.filter((trade) => trade.side === "B").map(stripSide).slice(0, 15),
-    sells: trades.filter((trade) => trade.side === "A").map(stripSide).slice(0, 15),
+    buys: topValueTrades(trades.filter((trade) => trade.side === "B")),
+    sells: topValueTrades(trades.filter((trade) => trade.side === "A")),
   };
 }
 
 export function buildLimitFillFlow(rawTrades: unknown[], windowMs: number, now: number): { buys: MarketTrade[]; sells: MarketTrade[] } {
   const trades = parseWindowTrades(rawTrades, windowMs, now);
   return {
-    buys: trades.filter((trade) => trade.side === "A").map(stripSide).slice(0, 15),
-    sells: trades.filter((trade) => trade.side === "B").map(stripSide).slice(0, 15),
+    buys: topValueTrades(trades.filter((trade) => trade.side === "A")),
+    sells: topValueTrades(trades.filter((trade) => trade.side === "B")),
   };
+}
+
+function topValueTrades(trades: (MarketTrade & { side: "A" | "B" })[]): MarketTrade[] {
+  return [...trades].sort((a, b) => b.value - a.value).slice(0, 50).map(stripSide);
 }
 
 function parseWindowTrades(rawTrades: unknown[], windowMs: number, now: number): (MarketTrade & { side: "A" | "B" })[] {
