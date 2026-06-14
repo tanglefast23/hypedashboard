@@ -6,9 +6,8 @@ import { useEffect, useState } from "react";
 type SortKey = "date" | "price" | "size" | "value";
 type SortDirection = "asc" | "desc";
 type SortState = { key: SortKey; direction: SortDirection } | null;
-type SeenMap = Record<string, number>;
 type VolumeRange = "day" | "month";
-import { FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, PERFORMANCE_TIMEFRAMES, type FlowTimeframeId, type HeaderTimeframeId, type LimitOrderLevel, type MarketTrade } from "../lib/order-flow";
+import { FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, PERFORMANCE_TIMEFRAMES, type FlowTimeframeId, type HeaderTimeframeId, type MarketTrade } from "../lib/order-flow";
 import { formatCompactUsd, formatCompactUsdOneDecimal, formatNumber, formatPercent, formatUsd } from "../lib/format";
 import type { DashboardData, HypeTwap } from "../lib/types";
 
@@ -18,13 +17,11 @@ type Props = { initialData: DashboardData };
 
 export function Dashboard({ initialData }: Props) {
   const [status, setStatus] = useState<Status>({ data: initialData, error: null, loading: false });
-  const [limitFrame, setLimitFrame] = useState<FlowTimeframeId>("5m");
-  const [marketFrame, setMarketFrame] = useState<FlowTimeframeId>("5m");
+  const [flowFrame, setFlowFrame] = useState<FlowTimeframeId>("5m");
   const [volumeRange, setVolumeRange] = useState<VolumeRange>("day");
-  const [seenMap, setSeenMap] = useState<SeenMap>(() => addLimitRowsToSeenMap({}, initialData));
 
   useEffect(() => {
-    const timer = window.setInterval(() => { void refresh(setStatus, setSeenMap); }, 30_000);
+    const timer = window.setInterval(() => { void refresh(setStatus); }, 30_000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -32,15 +29,15 @@ export function Dashboard({ initialData }: Props) {
 
   return (
     <main className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-5 md:px-8 md:py-8">
-      <Header data={data} loading={status.loading} onRefresh={() => void refresh(setStatus, setSeenMap)} />
+      <Header data={data} loading={status.loading} onRefresh={() => void refresh(setStatus)} />
       {status.error ? <ErrorBanner message={status.error} /> : null}
       <PerformanceGrid data={data} />
       <VolumeBarChart data={data} range={volumeRange} onRange={setVolumeRange} />
       <section className="grid gap-6 xl:grid-cols-2">
-        <OrderFlowCard frame={limitFrame} kind="limit" onFrame={setLimitFrame} seenMap={seenMap} title="Perps Limit Buys / Sells" buys={data.orderFlow.perps.limitBook[limitFrame].buys} sells={data.orderFlow.perps.limitBook[limitFrame].sells} venue="HYPE perps" />
-        <OrderFlowCard frame={limitFrame} kind="limit" onFrame={setLimitFrame} seenMap={seenMap} title="Spot Limit Buys / Sells" buys={data.orderFlow.spot.limitBook[limitFrame].buys} sells={data.orderFlow.spot.limitBook[limitFrame].sells} venue="HYPE/USDC spot" />
-        <OrderFlowCard frame={marketFrame} kind="market" onFrame={setMarketFrame} seenMap={seenMap} title="Perps Market Buys / Sells" buys={data.orderFlow.perps.marketTrades[marketFrame].buys} sells={data.orderFlow.perps.marketTrades[marketFrame].sells} venue="HYPE perps" />
-        <OrderFlowCard frame={marketFrame} kind="market" onFrame={setMarketFrame} seenMap={seenMap} title="Spot Market Buys / Sells" buys={data.orderFlow.spot.marketTrades[marketFrame].buys} sells={data.orderFlow.spot.marketTrades[marketFrame].sells} venue="HYPE/USDC spot" />
+        <OrderFlowCard frame={flowFrame} onFrame={setFlowFrame} title="Perps Market Buys / Sells" buys={data.orderFlow.perps.marketTrades[flowFrame].buys} sells={data.orderFlow.perps.marketTrades[flowFrame].sells} subtitle="Completed aggressive taker trades on HYPE perps." />
+        <OrderFlowCard frame={flowFrame} onFrame={setFlowFrame} title="Spot Market Buys / Sells" buys={data.orderFlow.spot.marketTrades[flowFrame].buys} sells={data.orderFlow.spot.marketTrades[flowFrame].sells} subtitle="Completed aggressive taker trades on HYPE/USDC spot." />
+        <OrderFlowCard frame={flowFrame} onFrame={setFlowFrame} title="Perps Filled Limit Buys / Sells" buys={data.orderFlow.perps.limitFills[flowFrame].buys} sells={data.orderFlow.perps.limitFills[flowFrame].sells} subtitle="Completed maker-side limit fills inferred from the HYPE perps tape." />
+        <OrderFlowCard frame={flowFrame} onFrame={setFlowFrame} title="Spot Filled Limit Buys / Sells" buys={data.orderFlow.spot.limitFills[flowFrame].buys} sells={data.orderFlow.spot.limitFills[flowFrame].sells} subtitle="Completed maker-side limit fills inferred from the HYPE/USDC spot tape." />
       </section>
       <section className="grid gap-6 xl:grid-cols-[minmax(360px,0.72fr)_minmax(0,1.28fr)]">
         <HypeTwapPanel data={data} />
@@ -49,13 +46,12 @@ export function Dashboard({ initialData }: Props) {
   );
 }
 
-async function refresh(setStatus: React.Dispatch<React.SetStateAction<Status>>, setSeenMap: React.Dispatch<React.SetStateAction<SeenMap>>) {
+async function refresh(setStatus: React.Dispatch<React.SetStateAction<Status>>) {
   setStatus((current) => ({ ...current, loading: true, error: null }));
   try {
     const response = await fetch("/api/dashboard", { cache: "no-store" });
     if (!response.ok) throw new Error(`Dashboard refresh failed: ${response.status}`);
     const data = await response.json() as DashboardData;
-    setSeenMap((current) => addLimitRowsToSeenMap(current, data));
     setStatus({ data, error: null, loading: false });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Refresh failed";
@@ -122,11 +118,11 @@ function VolumeRangePills({ active, onRange }: { active: VolumeRange; onRange: (
   return <div className="flex gap-2"><button className={pillClass(active === "day")} onClick={() => onRange("day")}>Day</button><button className={pillClass(active === "month")} onClick={() => onRange("month")}>Month</button></div>;
 }
 
-function OrderFlowCard({ buys, frame, kind, onFrame, seenMap, sells, title, venue }: { buys: LimitOrderLevel[] | MarketTrade[]; frame: FlowTimeframeId; kind: "limit" | "market"; onFrame: (frame: FlowTimeframeId) => void; seenMap: SeenMap; sells: LimitOrderLevel[] | MarketTrade[]; title: string; venue: string }) {
+function OrderFlowCard({ buys, frame, onFrame, sells, subtitle, title }: { buys: MarketTrade[]; frame: FlowTimeframeId; onFrame: (frame: FlowTimeframeId) => void; sells: MarketTrade[]; subtitle: string; title: string }) {
   return (
     <section className="rounded-3xl border border-slate-700/50 bg-slate-950/60 p-5 shadow-2xl shadow-black/20 backdrop-blur">
-      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div><h2 className="text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-slate-400">Top 15 {venue} {kind === "limit" ? "book levels" : "recent executed trades"}.</p></div><Pills active={frame} onFrame={onFrame} /></div>
-      <div className="grid gap-4 md:grid-cols-2"><FlowTable kind={kind} rows={buys} seenMap={seenMap} side="BUY" /><FlowTable kind={kind} rows={sells} seenMap={seenMap} side="SELL" /></div>
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div><h2 className="text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-slate-400">{subtitle}</p></div><Pills active={frame} onFrame={onFrame} /></div>
+      <div className="grid gap-4 md:grid-cols-2"><FlowTable rows={buys} side="BUY" /><FlowTable rows={sells} side="SELL" /></div>
     </section>
   );
 }
@@ -140,11 +136,11 @@ function pillClass(active: boolean): string {
   return active ? `${base} border-emerald-300 bg-emerald-300 text-slate-950` : `${base} border-slate-700 bg-slate-900/70 text-slate-300 hover:border-slate-500`;
 }
 
-function FlowTable({ kind, rows, seenMap, side }: { kind: "limit" | "market"; rows: (LimitOrderLevel | MarketTrade)[]; seenMap: SeenMap; side: "BUY" | "SELL" }) {
+function FlowTable({ rows, side }: { rows: MarketTrade[]; side: "BUY" | "SELL" }) {
   const [sort, setSort] = useState<SortState>(null);
-  const sortedRows = sortRows(rows, sort, kind, side, seenMap);
+  const sortedRows = sortRows(rows, sort);
   return (
-    <div><div className={`mb-2 mono text-sm font-semibold ${side === "BUY" ? "text-emerald-300" : "text-rose-300"}`}>{side}</div><div className="overflow-hidden rounded-2xl border border-slate-800"><table className="w-full text-left text-xs"><thead className="bg-slate-900/70 text-slate-500"><tr><SortableHead label="Date" sortKey="date" sort={sort} onSort={setSort} padded /><SortableHead label="Price" sortKey="price" sort={sort} onSort={setSort} /><SortableHead label="Size" sortKey="size" sort={sort} onSort={setSort} /><SortableHead label="Value" sortKey="value" sort={sort} onSort={setSort} /></tr></thead><tbody>{sortedRows.map((row, index) => <tr className="border-t border-slate-800/80" key={`${side}-${rowKey(row)}-${index}`}><td className="mono px-3 py-2 text-slate-400">{formatElapsed(getRowTime(row, kind, side, seenMap))}</td><td className="mono">{formatUsd(row.price, 4)}</td><td className="mono">{formatNumber(row.size)}</td><td className="mono">{formatCompactUsd(row.value)}</td></tr>)}</tbody></table></div></div>
+    <div><div className={`mb-2 mono text-sm font-semibold ${side === "BUY" ? "text-emerald-300" : "text-rose-300"}`}>{side}</div><div className="overflow-hidden rounded-2xl border border-slate-800"><table className="w-full text-left text-xs"><thead className="bg-slate-900/70 text-slate-500"><tr><SortableHead label="Date" sortKey="date" sort={sort} onSort={setSort} padded /><SortableHead label="Price" sortKey="price" sort={sort} onSort={setSort} /><SortableHead label="Size" sortKey="size" sort={sort} onSort={setSort} /><SortableHead label="Value" sortKey="value" sort={sort} onSort={setSort} /></tr></thead><tbody>{sortedRows.map((row, index) => <tr className="border-t border-slate-800/80" key={`${side}-${rowKey(row)}-${index}`}><td className="mono px-3 py-2 text-slate-400">{formatElapsed(row.time)}</td><td className="mono">{formatUsd(row.price, 4)}</td><td className="mono">{formatNumber(row.size)}</td><td className="mono">{formatCompactUsd(row.value)}</td></tr>)}</tbody></table></div></div>
   );
 }
 
@@ -158,39 +154,18 @@ function nextSort(current: SortState, key: SortKey): SortState {
   return { key, direction: current.direction === "desc" ? "asc" : "desc" };
 }
 
-function sortRows(rows: (LimitOrderLevel | MarketTrade)[], sort: SortState, kind: "limit" | "market", side: "BUY" | "SELL", seenMap: SeenMap) {
+function sortRows(rows: MarketTrade[], sort: SortState) {
   if (!sort) return rows;
-  return [...rows].sort((a, b) => (valueForSort(a, sort.key, kind, side, seenMap) - valueForSort(b, sort.key, kind, side, seenMap)) * (sort.direction === "asc" ? 1 : -1));
+  return [...rows].sort((a, b) => (valueForSort(a, sort.key) - valueForSort(b, sort.key)) * (sort.direction === "asc" ? 1 : -1));
 }
 
-function valueForSort(row: LimitOrderLevel | MarketTrade, key: SortKey, kind: "limit" | "market", side: "BUY" | "SELL", seenMap: SeenMap): number {
-  if (key === "date") return getRowTime(row, kind, side, seenMap);
+function valueForSort(row: MarketTrade, key: SortKey): number {
+  if (key === "date") return row.time;
   return row[key];
 }
 
-function getRowTime(row: LimitOrderLevel | MarketTrade, kind: "limit" | "market", side: "BUY" | "SELL", seenMap: SeenMap): number {
-  if (kind === "market" && "time" in row) return row.time;
-  return seenMap[seenKey(side, row)] ?? Date.now();
-}
-
-function rowKey(row: LimitOrderLevel | MarketTrade): string {
-  return `${row.price}-${row.size}-${row.value}`;
-}
-
-function seenKey(side: "BUY" | "SELL", row: LimitOrderLevel | MarketTrade): string {
-  return `${side}-${rowKey(row)}`;
-}
-
-function addLimitRowsToSeenMap(current: SeenMap, data: DashboardData): SeenMap {
-  const now = Date.now();
-  const next = { ...current };
-  [data.orderFlow.perps, data.orderFlow.spot].forEach((venue) => {
-    Object.values(venue.limitBook).forEach((book) => {
-      book.buys.forEach((row) => { next[seenKey("BUY", row)] ??= now; });
-      book.sells.forEach((row) => { next[seenKey("SELL", row)] ??= now; });
-    });
-  });
-  return next;
+function rowKey(row: MarketTrade): string {
+  return `${row.time}-${row.price}-${row.size}-${row.value}`;
 }
 
 function formatElapsed(timestamp: number): string {

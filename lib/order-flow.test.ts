@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDailyVolumeBars, buildHourlyVolumeBars, buildMarketFlow, HEADER_TIMEFRAMES, normalizeL2Book } from "./order-flow";
+import { buildDailyVolumeBars, buildHourlyVolumeBars, buildLimitFillFlow, buildMarketFlow, HEADER_TIMEFRAMES, normalizeL2Book } from "./order-flow";
 
 const now = 1_000_000;
 
@@ -23,6 +23,17 @@ describe("order flow helpers", () => {
     const flow = buildMarketFlow(trades, 5 * 60_000, now);
     expect(flow.buys).toEqual([{ price: 10, size: 2, time: now - 60_000, value: 20 }]);
     expect(flow.sells).toEqual([{ price: 20, size: 3, time: now - 2 * 60_000, value: 60 }]);
+  });
+
+  it("builds filled limit buy and sell rows from the maker side of trades", () => {
+    const trades = [
+      { side: "B", px: "10", sz: "2", time: now - 60_000, tid: 1 },
+      { side: "A", px: "20", sz: "3", time: now - 2 * 60_000, tid: 2 },
+    ];
+
+    const flow = buildLimitFillFlow(trades, 5 * 60_000, now);
+    expect(flow.buys).toEqual([{ price: 20, size: 3, time: now - 2 * 60_000, value: 60 }]);
+    expect(flow.sells).toEqual([{ price: 10, size: 2, time: now - 60_000, value: 20 }]);
   });
 
   it("defines compact header changes for 30m, 1h, 1d, and 1w", () => {

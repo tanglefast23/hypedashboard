@@ -49,11 +49,23 @@ export function normalizeL2Book(raw: unknown, fallbackPrice: number): { buys: Li
 }
 
 export function buildMarketFlow(rawTrades: unknown[], windowMs: number, now: number): { buys: MarketTrade[]; sells: MarketTrade[] } {
-  const trades = rawTrades.map(parseTrade).filter(isMarketTrade).filter((trade) => now - trade.time <= windowMs);
+  const trades = parseWindowTrades(rawTrades, windowMs, now);
   return {
     buys: trades.filter((trade) => trade.side === "B").map(stripSide).slice(0, 15),
     sells: trades.filter((trade) => trade.side === "A").map(stripSide).slice(0, 15),
   };
+}
+
+export function buildLimitFillFlow(rawTrades: unknown[], windowMs: number, now: number): { buys: MarketTrade[]; sells: MarketTrade[] } {
+  const trades = parseWindowTrades(rawTrades, windowMs, now);
+  return {
+    buys: trades.filter((trade) => trade.side === "A").map(stripSide).slice(0, 15),
+    sells: trades.filter((trade) => trade.side === "B").map(stripSide).slice(0, 15),
+  };
+}
+
+function parseWindowTrades(rawTrades: unknown[], windowMs: number, now: number): (MarketTrade & { side: "A" | "B" })[] {
+  return rawTrades.map(parseTrade).filter(isMarketTrade).filter((trade) => now - trade.time <= windowMs);
 }
 
 export function buildHourlyVolumeBars(candles: { time: number; volume: number }[], price: number): HourlyVolumeBar[] {

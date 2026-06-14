@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { buildDailyVolumeBars, buildHourlyVolumeBars, buildMarketFlow, FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, normalizeL2Book, PERFORMANCE_TIMEFRAMES } from "./order-flow";
+import { buildDailyVolumeBars, buildHourlyVolumeBars, buildLimitFillFlow, buildMarketFlow, FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, PERFORMANCE_TIMEFRAMES } from "./order-flow";
 import type { HeaderTimeframeId, TimeframeId } from "./order-flow";
 import { calculatePriceChangePercent } from "./price-change";
 import { buildTwapPressure, normalizeTwapRows } from "./twap";
@@ -160,32 +160,25 @@ function isHypeSpotMarket(market: Record<string, unknown>, hypeTokenIds: number[
 function isNumber(value: number | null): value is number { return value !== null; }
 
 async function getOrderFlow(price: number, candles: Candle[], monthlyCandles: Candle[]): Promise<DashboardData["orderFlow"]> {
-  return cached("order-flow-v2", 30_000, async () => {
-    const [perpBook, perpTrades, spotBook, spotTrades] = await Promise.all([
-      getVenueOrderFlow("HYPE", price),
+  return cached("order-flow-v3", 30_000, async () => {
+    const [perpTrades, spotTrades] = await Promise.all([
       postHyperliquid({ type: "recentTrades", coin: "HYPE" }),
-      getVenueOrderFlow("@107", price),
       postHyperliquid({ type: "recentTrades", coin: "@107" }),
     ]);
     return {
       hourlyVolume: buildHourlyVolumeBars(candles, price),
       dailyVolume: buildDailyVolumeBars(monthlyCandles),
-      perps: buildVenueFlow(perpBook, z.array(z.unknown()).parse(perpTrades)),
-      spot: buildVenueFlow(spotBook, z.array(z.unknown()).parse(spotTrades)),
+      perps: buildVenueFlow(z.array(z.unknown()).parse(perpTrades)),
+      spot: buildVenueFlow(z.array(z.unknown()).parse(spotTrades)),
     };
   });
 }
 
-async function getVenueOrderFlow(coin: "HYPE" | "@107", price: number) {
-  const bookRaw = await postHyperliquid({ type: "l2Book", coin });
-  return normalizeL2Book(bookRaw, price);
-}
-
-function buildVenueFlow(book: ReturnType<typeof normalizeL2Book>, trades: unknown[]) {
+function buildVenueFlow(trades: unknown[]) {
   const now = Date.now();
   return {
-    limitBook: Object.fromEntries(FLOW_TIMEFRAMES.map((frame) => [frame.id, book])) as DashboardData["orderFlow"]["perps"]["limitBook"],
     marketTrades: Object.fromEntries(FLOW_TIMEFRAMES.map((frame) => [frame.id, buildMarketFlow(trades, frame.durationMs, now)])) as DashboardData["orderFlow"]["perps"]["marketTrades"],
+    limitFills: Object.fromEntries(FLOW_TIMEFRAMES.map((frame) => [frame.id, buildLimitFillFlow(trades, frame.durationMs, now)])) as DashboardData["orderFlow"]["perps"]["limitFills"],
   };
 }
 

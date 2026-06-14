@@ -1,4 +1,4 @@
-import type { FlowTimeframeId, HeaderTimeframeId, LimitOrderLevel, MarketTrade, TimeframeId, VolumeBar } from "./order-flow";
+import type { FlowTimeframeId, HeaderTimeframeId, MarketTrade, TimeframeId, VolumeBar } from "./order-flow";
 
 export type Candle = {
   time: number;
@@ -41,8 +41,8 @@ export type HypeTwapData = {
 };
 
 export type VenueOrderFlowData = {
-  limitBook: Record<FlowTimeframeId, { buys: LimitOrderLevel[]; sells: LimitOrderLevel[] }>;
   marketTrades: Record<FlowTimeframeId, { buys: MarketTrade[]; sells: MarketTrade[] }>;
+  limitFills: Record<FlowTimeframeId, { buys: MarketTrade[]; sells: MarketTrade[] }>;
 };
 
 export type OrderFlowData = {
