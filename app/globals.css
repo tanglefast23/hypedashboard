@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --background: #05070a;
+  --foreground: #e7edf5;
+  --muted: #8793a3;
+  --card: rgba(12, 17, 24, 0.84);
+  --line: rgba(148, 163, 184, 0.16);
+  --accent: #38f8ba;
+  --danger: #fb7185;
+  --success: #34d399;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 20% -10%, rgba(56, 248, 186, 0.16), transparent 34rem),
+    radial-gradient(circle at 86% 8%, rgba(56, 189, 248, 0.12), transparent 28rem),
+    var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+button, input { font: inherit; }
+
+.mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
