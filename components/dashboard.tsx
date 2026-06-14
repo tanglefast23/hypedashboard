@@ -2,6 +2,11 @@
 
 import { RefreshCcw } from "lucide-react";
 import { useEffect, useState } from "react";
+
+type SortKey = "date" | "price" | "size" | "value";
+type SortDirection = "asc" | "desc";
+type SortState = { key: SortKey; direction: SortDirection } | null;
+type SeenMap = Record<string, number>;
 import { FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, PERFORMANCE_TIMEFRAMES, type FlowTimeframeId, type HeaderTimeframeId, type LimitOrderLevel, type MarketTrade } from "../lib/order-flow";
 import { formatCompactUsd, formatNumber, formatPercent, formatUsd } from "../lib/format";
 import type { DashboardData, HypeTwap } from "../lib/types";
@@ -14,22 +19,24 @@ export function Dashboard({ initialData }: Props) {
   const [status, setStatus] = useState<Status>({ data: initialData, error: null, loading: false });
   const [limitFrame, setLimitFrame] = useState<FlowTimeframeId>("5m");
   const [marketFrame, setMarketFrame] = useState<FlowTimeframeId>("5m");
+  const [seenMap, setSeenMap] = useState<SeenMap>(() => addLimitRowsToSeenMap({}, initialData));
 
   useEffect(() => {
-    const timer = window.setInterval(() => { void refresh(setStatus); }, 30_000);
+    const timer = window.setInterval(() => { void refresh(setStatus, setSeenMap); }, 30_000);
     return () => window.clearInterval(timer);
   }, []);
 
   const data = status.data ?? initialData;
+
   return (
     <main className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-5 md:px-8 md:py-8">
-      <Header data={data} loading={status.loading} onRefresh={() => void refresh(setStatus)} />
+      <Header data={data} loading={status.loading} onRefresh={() => void refresh(setStatus, setSeenMap)} />
       {status.error ? <ErrorBanner message={status.error} /> : null}
       <PerformanceGrid data={data} />
       <VolumeBarChart data={data} />
       <section className="grid gap-6 xl:grid-cols-2">
-        <OrderFlowCard frame={limitFrame} kind="limit" onFrame={setLimitFrame} title="Limit Buys / Sells" buys={data.orderFlow.limitBook[limitFrame].buys} sells={data.orderFlow.limitBook[limitFrame].sells} />
-        <OrderFlowCard frame={marketFrame} kind="market" onFrame={setMarketFrame} title="Market Buys / Sells" buys={data.orderFlow.marketTrades[marketFrame].buys} sells={data.orderFlow.marketTrades[marketFrame].sells} />
+        <OrderFlowCard frame={limitFrame} kind="limit" onFrame={setLimitFrame} seenMap={seenMap} title="Limit Buys / Sells" buys={data.orderFlow.limitBook[limitFrame].buys} sells={data.orderFlow.limitBook[limitFrame].sells} />
+        <OrderFlowCard frame={marketFrame} kind="market" onFrame={setMarketFrame} seenMap={seenMap} title="Market Buys / Sells" buys={data.orderFlow.marketTrades[marketFrame].buys} sells={data.orderFlow.marketTrades[marketFrame].sells} />
       </section>
       <section className="grid gap-6 xl:grid-cols-[minmax(360px,0.72fr)_minmax(0,1.28fr)]">
         <HypeTwapPanel data={data} />
@@ -38,12 +45,13 @@ export function Dashboard({ initialData }: Props) {
   );
 }
 
-async function refresh(setStatus: React.Dispatch<React.SetStateAction<Status>>) {
+async function refresh(setStatus: React.Dispatch<React.SetStateAction<Status>>, setSeenMap: React.Dispatch<React.SetStateAction<SeenMap>>) {
   setStatus((current) => ({ ...current, loading: true, error: null }));
   try {
     const response = await fetch("/api/dashboard", { cache: "no-store" });
     if (!response.ok) throw new Error(`Dashboard refresh failed: ${response.status}`);
     const data = await response.json() as DashboardData;
+    setSeenMap((current) => addLimitRowsToSeenMap(current, data));
     setStatus({ data, error: null, loading: false });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Refresh failed";
@@ -104,11 +112,11 @@ function VolumeBarChart({ data }: { data: DashboardData }) {
   );
 }
 
-function OrderFlowCard({ buys, frame, kind, onFrame, sells, title }: { buys: LimitOrderLevel[] | MarketTrade[]; frame: FlowTimeframeId; kind: "limit" | "market"; onFrame: (frame: FlowTimeframeId) => void; sells: LimitOrderLevel[] | MarketTrade[]; title: string }) {
+function OrderFlowCard({ buys, frame, kind, onFrame, seenMap, sells, title }: { buys: LimitOrderLevel[] | MarketTrade[]; frame: FlowTimeframeId; kind: "limit" | "market"; onFrame: (frame: FlowTimeframeId) => void; seenMap: SeenMap; sells: LimitOrderLevel[] | MarketTrade[]; title: string }) {
   return (
     <section className="rounded-3xl border border-slate-700/50 bg-slate-950/60 p-5 shadow-2xl shadow-black/20 backdrop-blur">
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div><h2 className="text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-slate-400">Top 15 HYPE {kind === "limit" ? "book levels" : "executed trades"}.</p></div><Pills active={frame} onFrame={onFrame} /></div>
-      <div className="grid gap-4 md:grid-cols-2"><FlowTable rows={buys} side="BUY" /><FlowTable rows={sells} side="SELL" /></div>
+      <div className="grid gap-4 md:grid-cols-2"><FlowTable kind={kind} rows={buys} seenMap={seenMap} side="BUY" /><FlowTable kind={kind} rows={sells} seenMap={seenMap} side="SELL" /></div>
     </section>
   );
 }
@@ -122,10 +130,64 @@ function pillClass(active: boolean): string {
   return active ? `${base} border-emerald-300 bg-emerald-300 text-slate-950` : `${base} border-slate-700 bg-slate-900/70 text-slate-300 hover:border-slate-500`;
 }
 
-function FlowTable({ rows, side }: { rows: (LimitOrderLevel | MarketTrade)[]; side: "BUY" | "SELL" }) {
+function FlowTable({ kind, rows, seenMap, side }: { kind: "limit" | "market"; rows: (LimitOrderLevel | MarketTrade)[]; seenMap: SeenMap; side: "BUY" | "SELL" }) {
+  const [sort, setSort] = useState<SortState>(null);
+  const sortedRows = sortRows(rows, sort, kind, side, seenMap);
   return (
-    <div><div className={`mb-2 mono text-sm font-semibold ${side === "BUY" ? "text-emerald-300" : "text-rose-300"}`}>{side}</div><div className="overflow-hidden rounded-2xl border border-slate-800"><table className="w-full text-left text-xs"><thead className="bg-slate-900/70 text-slate-500"><tr><th className="px-3 py-2">Price</th><th>Size</th><th>Value</th></tr></thead><tbody>{rows.map((row, index) => <tr className="border-t border-slate-800/80" key={`${side}-${index}`}><td className="mono px-3 py-2">{formatUsd(row.price, 4)}</td><td className="mono">{formatNumber(row.size)}</td><td className="mono">{formatCompactUsd(row.value)}</td></tr>)}</tbody></table></div></div>
+    <div><div className={`mb-2 mono text-sm font-semibold ${side === "BUY" ? "text-emerald-300" : "text-rose-300"}`}>{side}</div><div className="overflow-hidden rounded-2xl border border-slate-800"><table className="w-full text-left text-xs"><thead className="bg-slate-900/70 text-slate-500"><tr><SortableHead label="Date" sortKey="date" sort={sort} onSort={setSort} padded /><SortableHead label="Price" sortKey="price" sort={sort} onSort={setSort} /><SortableHead label="Size" sortKey="size" sort={sort} onSort={setSort} /><SortableHead label="Value" sortKey="value" sort={sort} onSort={setSort} /></tr></thead><tbody>{sortedRows.map((row, index) => <tr className="border-t border-slate-800/80" key={`${side}-${rowKey(row)}-${index}`}><td className="mono px-3 py-2 text-slate-400">{formatElapsed(getRowTime(row, kind, side, seenMap))}</td><td className="mono">{formatUsd(row.price, 4)}</td><td className="mono">{formatNumber(row.size)}</td><td className="mono">{formatCompactUsd(row.value)}</td></tr>)}</tbody></table></div></div>
   );
+}
+
+function SortableHead({ label, onSort, padded = false, sort, sortKey }: { label: string; onSort: (sort: SortState) => void; padded?: boolean; sort: SortState; sortKey: SortKey }) {
+  const active = sort?.key === sortKey;
+  return <th className={padded ? "px-3 py-2" : "py-2"}><button className={`inline-flex items-center gap-1 hover:text-slate-200 ${active ? "text-slate-200" : ""}`} onClick={() => onSort(nextSort(sort, sortKey))}>{label}{active ? <span>{sort.direction === "asc" ? "↑" : "↓"}</span> : null}</button></th>;
+}
+
+function nextSort(current: SortState, key: SortKey): SortState {
+  if (current?.key !== key) return { key, direction: "desc" };
+  return { key, direction: current.direction === "desc" ? "asc" : "desc" };
+}
+
+function sortRows(rows: (LimitOrderLevel | MarketTrade)[], sort: SortState, kind: "limit" | "market", side: "BUY" | "SELL", seenMap: SeenMap) {
+  if (!sort) return rows;
+  return [...rows].sort((a, b) => (valueForSort(a, sort.key, kind, side, seenMap) - valueForSort(b, sort.key, kind, side, seenMap)) * (sort.direction === "asc" ? 1 : -1));
+}
+
+function valueForSort(row: LimitOrderLevel | MarketTrade, key: SortKey, kind: "limit" | "market", side: "BUY" | "SELL", seenMap: SeenMap): number {
+  if (key === "date") return getRowTime(row, kind, side, seenMap);
+  return row[key];
+}
+
+function getRowTime(row: LimitOrderLevel | MarketTrade, kind: "limit" | "market", side: "BUY" | "SELL", seenMap: SeenMap): number {
+  if (kind === "market" && "time" in row) return row.time;
+  return seenMap[seenKey(side, row)] ?? Date.now();
+}
+
+function rowKey(row: LimitOrderLevel | MarketTrade): string {
+  return `${row.price}-${row.size}-${row.value}`;
+}
+
+function seenKey(side: "BUY" | "SELL", row: LimitOrderLevel | MarketTrade): string {
+  return `${side}-${rowKey(row)}`;
+}
+
+function addLimitRowsToSeenMap(current: SeenMap, data: DashboardData): SeenMap {
+  const now = Date.now();
+  const next = { ...current };
+  Object.values(data.orderFlow.limitBook).forEach((book) => {
+    book.buys.forEach((row) => { next[seenKey("BUY", row)] ??= now; });
+    book.sells.forEach((row) => { next[seenKey("SELL", row)] ??= now; });
+  });
+  return next;
+}
+
+function formatElapsed(timestamp: number): string {
+  const minutes = Math.max(0, (Date.now() - timestamp) / 60_000);
+  if (minutes < 10) return `${minutes.toFixed(1)}m`;
+  if (minutes < 60) return `${Math.floor(minutes)}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = Math.floor(minutes % 60);
+  return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
 }
 
 function HypeTwapPanel({ data }: { data: DashboardData }) {
