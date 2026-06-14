@@ -2,12 +2,10 @@ import { z } from "zod";
 import { getChartRange } from "./chart-ranges";
 import { calculatePriceChangePercent } from "./price-change";
 import { buildTwapPressure, normalizeTwapRows } from "./twap";
-import type { Candle, DashboardData, EcosystemProtocol, PerpMarket } from "./types";
+import type { Candle, DashboardData, PerpMarket } from "./types";
 
 const HYPERLIQUID_INFO_URL = "https://api.hyperliquid.xyz/info";
 const COINGECKO_URL = "https://api.coingecko.com/api/v3/coins/hyperliquid?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false";
-const DEFILLAMA_CHAINS_URL = "https://api.llama.fi/v2/chains";
-const DEFILLAMA_PROTOCOLS_URL = "https://api.llama.fi/protocols";
 const HYPURRSCAN_TWAPS_URL = "https://api.hypurrscan.io/twap/*";
 
 type CacheEntry = { expiresAt: number; value: unknown };
@@ -168,38 +166,10 @@ function isPerpMarket(market: PerpMarket | null): market is PerpMarket {
   return market !== null;
 }
 
-async function getEcosystem(): Promise<DashboardData["ecosystem"]> {
-  return cached("ecosystem", 300_000, async () => {
-    const [chains, protocols] = await Promise.all([getJson(DEFILLAMA_CHAINS_URL), getJson(DEFILLAMA_PROTOCOLS_URL)]);
-    const chainTvl = parseChainTvl(chains);
-    return { chainTvl, protocols: parseProtocols(protocols) };
-  });
-}
-
-function parseChainTvl(raw: unknown): number | null {
-  const chains = z.array(z.record(z.unknown())).parse(raw);
-  const chain = chains.find((item) => item.name === "Hyperliquid L1");
-  return chain ? toNumber(chain.tvl) : null;
-}
-
-function parseProtocols(raw: unknown): EcosystemProtocol[] {
-  const protocols = z.array(z.record(z.unknown())).parse(raw);
-  return protocols.filter(isHyperliquidProtocol).map((item) => ({
-    name: String(item.name ?? "Unknown"),
-    tvl: toNumber(item.tvl) ?? 0,
-    change1d: toNumber(item.change_1d),
-  })).sort((a, b) => b.tvl - a.tvl).slice(0, 6);
-}
-
-function isHyperliquidProtocol(item: Record<string, unknown>): boolean {
-  const chains = Array.isArray(item.chains) ? item.chains.map(String) : [];
-  return chains.some((chain) => chain.toLowerCase().includes("hyperliquid"));
-}
-
 export async function getDashboardData(): Promise<DashboardData> {
   const hype = await getHypeMarket();
-  const [candles, perps, ecosystem, twaps] = await Promise.all([
-    getCandles(), getPerps(), getEcosystem(), getHypeTwaps(hype.price),
+  const [candles, perps, twaps] = await Promise.all([
+    getCandles(), getPerps(), getHypeTwaps(hype.price),
   ]);
-  return { generatedAt: new Date().toISOString(), hype, candles, perps, ecosystem, twaps };
+  return { generatedAt: new Date().toISOString(), hype, candles, perps, twaps };
 }

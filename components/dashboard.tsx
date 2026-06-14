@@ -2,24 +2,15 @@
 
 import { Activity, Database, RefreshCcw, TrendingUp, Waves } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getChartRangeOptions, type ChartRange } from "../lib/chart-ranges";
 import { formatCompactUsd, formatNumber, formatPercent, formatUsd } from "../lib/format";
-import type { Candle, DashboardData, HypeTwap } from "../lib/types";
-import { PriceChart } from "./price-chart";
+import type { DashboardData, HypeTwap } from "../lib/types";
 
 type Status = { data: DashboardData | null; error: string | null; loading: boolean };
-type ChartStatus = { candles: Candle[]; range: ChartRange; loading: boolean; error: string | null };
 
 type Props = { initialData: DashboardData };
 
 export function Dashboard({ initialData }: Props) {
   const [status, setStatus] = useState<Status>({ data: initialData, error: null, loading: false });
-  const [chart, setChart] = useState<ChartStatus>({
-    candles: initialData.candles,
-    range: getChartRangeOptions()[3],
-    loading: false,
-    error: null,
-  });
 
   useEffect(() => {
     const timer = window.setInterval(() => { void refresh(setStatus); }, 15_000);
@@ -31,19 +22,11 @@ export function Dashboard({ initialData }: Props) {
     <main className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-5 md:px-8 md:py-8">
       <Header data={data} loading={status.loading} onRefresh={() => void refresh(setStatus)} />
       {status.error ? <ErrorBanner message={status.error} /> : null}
-      {chart.error ? <ErrorBanner message={chart.error} /> : null}
       <HeroGrid data={data} />
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(360px,0.7fr)]">
-        <Card title="Interactive HYPE Price Chart" subtitle="Drag, scroll, pinch, and use the timeline buttons for 30M to 30D views.">
-          <ChartToolbar chart={chart} onSelect={(range) => void loadCandles(range, setChart)} />
-          <PriceChart candles={chart.candles} />
-        </Card>
-        <div className="grid gap-6">
-          <HypeTwapPanel data={data} />
-          <PerpsTable data={data} />
-        </div>
+      <section className="grid gap-6 xl:grid-cols-[minmax(360px,0.72fr)_minmax(0,1.28fr)]">
+        <HypeTwapPanel data={data} />
+        <PerpsTable data={data} />
       </section>
-      <Ecosystem data={data} />
     </main>
   );
 }
@@ -61,37 +44,6 @@ async function refresh(setStatus: React.Dispatch<React.SetStateAction<Status>>) 
   }
 }
 
-async function loadCandles(range: ChartRange, setChart: React.Dispatch<React.SetStateAction<ChartStatus>>) {
-  setChart((current) => ({ ...current, range, loading: true, error: null }));
-  try {
-    const response = await fetch(`/api/candles?range=${range.id}`, { cache: "no-store" });
-    if (!response.ok) throw new Error(`Candle refresh failed: ${response.status}`);
-    const payload = await response.json() as { candles: Candle[]; range: ChartRange };
-    setChart({ candles: payload.candles, range: payload.range, loading: false, error: null });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Candle refresh failed";
-    setChart((current) => ({ ...current, error: message, loading: false }));
-  }
-}
-
-function ChartToolbar({ chart, onSelect }: { chart: ChartStatus; onSelect: (range: ChartRange) => void }) {
-  return (
-    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-sm text-slate-400">Showing <span className="mono text-emerald-300">{chart.range.label}</span> HYPE candles from Hyperliquid.</p>
-      <div className="flex flex-wrap gap-2">{getChartRangeOptions().map((range) => <RangeButton key={range.id} active={range.id === chart.range.id} disabled={chart.loading} range={range} onSelect={onSelect} />)}</div>
-    </div>
-  );
-}
-
-function RangeButton({ active, disabled, range, onSelect }: { active: boolean; disabled: boolean; range: ChartRange; onSelect: (range: ChartRange) => void }) {
-  return <button className={rangeButtonClass(active)} disabled={disabled} onClick={() => onSelect(range)}>{range.label}</button>;
-}
-
-function rangeButtonClass(active: boolean): string {
-  const base = "mono rounded-full border px-3 py-1.5 text-xs transition disabled:cursor-wait disabled:opacity-50";
-  return active ? `${base} border-emerald-300 bg-emerald-300 text-slate-950` : `${base} border-slate-700 bg-slate-900/70 text-slate-300 hover:border-slate-500`;
-}
-
 function Header({ data, loading, onRefresh }: { data: DashboardData; loading: boolean; onRefresh: () => void }) {
   return (
     <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -99,7 +51,7 @@ function Header({ data, loading, onRefresh }: { data: DashboardData; loading: bo
         <p className="mb-2 text-sm font-semibold uppercase tracking-[0.32em] text-emerald-300">Hyperliquid Mission Control</p>
         <h1 className="text-3xl font-semibold tracking-tight md:text-5xl">HYPE Dashboard</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400 md:text-base">
-          Public read-only dashboard for HYPE token, Hyperliquid perps, and ecosystem TVL.
+          Public read-only dashboard for HYPE price, Hyperliquid perps, and live TWAP pressure.
         </p>
       </div>
       <button className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-700/80 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800" onClick={onRefresh}>
@@ -200,15 +152,6 @@ function PerpsTable({ data }: { data: DashboardData }) {
         <tbody>{data.perps.map((market) => <tr className="border-t border-slate-800/80" key={market.name}><td className="py-3 font-semibold">{market.name}</td><td className="mono">{formatUsd(market.markPrice, 4)}</td><td className={`mono ${valueTone(market.fundingRate)}`}>{formatPercent(market.fundingRate, 4)}</td><td className="mono">{formatCompactUsd(market.volume24h)}</td><td className="mono">{formatNumber(market.openInterest)}</td></tr>)}</tbody>
       </table></div>
     </Card>
-  );
-}
-
-function Ecosystem({ data }: { data: DashboardData }) {
-  return (
-    <section className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
-      <Card title="Ecosystem TVL" subtitle="DefiLlama Hyperliquid L1 chain TVL"><p className="mono text-4xl font-semibold text-emerald-300">{formatCompactUsd(data.ecosystem.chainTvl)}</p><p className="mt-4 text-sm text-slate-400">Top protocols below are filtered by DefiLlama chains containing Hyperliquid.</p></Card>
-      <Card title="Top Hyperliquid Protocols" subtitle="Protocol TVL and daily change"><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{data.ecosystem.protocols.map((protocol) => <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4" key={protocol.name}><p className="font-semibold">{protocol.name}</p><p className="mono mt-3 text-2xl">{formatCompactUsd(protocol.tvl)}</p><p className={`mono mt-2 text-sm ${valueTone(protocol.change1d)}`}>{formatPercent(protocol.change1d)} 1D</p></div>)}</div></Card>
-    </section>
   );
 }
 

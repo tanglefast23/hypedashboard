@@ -26,17 +26,6 @@ export type HypeMarket = {
   volume24h: number | null;
 };
 
-export type EcosystemProtocol = {
-  name: string;
-  tvl: number;
-  change1d: number | null;
-};
-
-export type EcosystemTvl = {
-  chainTvl: number | null;
-  protocols: EcosystemProtocol[];
-};
-
 export type HypeTwap = {
   amount: number;
   endTime: number;
@@ -63,6 +52,5 @@ export type DashboardData = {
   hype: HypeMarket;
   candles: Candle[];
   perps: PerpMarket[];
-  ecosystem: EcosystemTvl;
   twaps: HypeTwapData;
 };
