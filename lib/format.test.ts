@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCompactUsd, formatNumber } from "./format";
+import { formatCompactUsd, formatCompactUsdOneDecimal, formatNumber } from "./format";
 
 describe("format helpers", () => {
   it("uses deterministic compact USD strings without locale ICU differences", () => {
@@ -10,5 +10,10 @@ describe("format helpers", () => {
   it("uses deterministic compact number strings", () => {
     expect(formatNumber(32_460)).toBe("32.46K");
     expect(formatNumber(20_000_000)).toBe("20M");
+  });
+
+  it("formats hover USD values with one decimal place", () => {
+    expect(formatCompactUsdOneDecimal(55_567_000)).toBe("$55.6M");
+    expect(formatCompactUsdOneDecimal(1_234)).toBe("$1.2K");
   });
 });
