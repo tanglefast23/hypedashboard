@@ -7,6 +7,7 @@ type SortKey = "date" | "price" | "size" | "value";
 type SortDirection = "asc" | "desc";
 type SortState = { key: SortKey; direction: SortDirection } | null;
 type VolumeRange = "day" | "week" | "month";
+type TwapFilter = "spot" | "perps" | "combined";
 import { FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, PERFORMANCE_TIMEFRAMES, type FlowTimeframeId, type HeaderTimeframeId, type MarketTrade } from "../lib/order-flow";
 import { formatCompactUsd, formatCompactUsdOneDecimal, formatNumber, formatPercent, formatUsd } from "../lib/format";
 import type { DashboardData, HypeTwap } from "../lib/types";
@@ -188,26 +189,56 @@ function formatElapsed(timestamp: number): string {
 }
 
 function HypeTwapPanel({ data }: { data: DashboardData }) {
+  const [filter, setFilter] = useState<TwapFilter>("combined");
+  const rows = filterTwapRows(data.twaps.rows, filter);
+  const pressure = buildFilteredTwapPressure(rows);
   return (
-    <Card title="TWAPs HYPE Buy Pressure" subtitle="Live active TWAP flow from HypurrScan, filtered to HYPE spot + HYPE-USD perps.">
+    <Card title="TWAPs HYPE Buy Pressure" action={<TwapFilterPills active={filter} onFilter={setFilter} />}>
       <div className="grid gap-5 lg:grid-cols-[minmax(220px,0.32fr)_minmax(0,0.68fr)]">
-        <div className="grid gap-3 content-start sm:grid-cols-2 lg:grid-cols-1">
-          <TwapStat label="Next 1h" value={signedUsd(data.twaps.pressure.next1h)} tone={valueTone(data.twaps.pressure.next1h)} />
-          <TwapStat label="Next 24h" value={signedUsd(data.twaps.pressure.next24h)} tone={valueTone(data.twaps.pressure.next24h)} />
-        </div>
-        <div className="min-w-0">
-          <div className="mb-3 flex items-center justify-between text-sm"><span className="text-slate-400">Active HYPE TWAPs</span><span className="mono text-slate-500">{data.twaps.rows.length}</span></div>
-          <div className="max-h-52 space-y-3 overflow-y-auto pr-2">
-            {data.twaps.rows.length ? data.twaps.rows.map((twap) => <TwapRow key={twap.hash} twap={twap} />) : <p className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-500">No active HYPE TWAPs right now.</p>}
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            <TwapStat label="Next 1h" value={signedUsd(pressure.next1h)} tone={valueTone(pressure.next1h)} />
+            <TwapStat label="Next 24h" value={signedUsd(pressure.next24h)} tone={valueTone(pressure.next24h)} />
           </div>
-        </div>
+        </section>
+        <section className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
+          <div className="mb-3 flex items-center justify-between text-sm"><span className="text-slate-400">Active TWAPs</span><span className="mono text-slate-500">{rows.length}</span></div>
+          <div className="max-h-52 space-y-3 overflow-y-auto pr-2">
+            {rows.length ? rows.map((twap) => <TwapRow key={twap.hash} twap={twap} />) : <p className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-500">No active TWAPs for this filter.</p>}
+          </div>
+        </section>
       </div>
     </Card>
   );
 }
 
-function Card({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
-  return <section className="rounded-3xl border border-slate-700/50 bg-slate-950/60 p-5 shadow-2xl shadow-black/20 backdrop-blur"><div className="mb-5"><h2 className="text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-slate-400">{subtitle}</p></div>{children}</section>;
+function TwapFilterPills({ active, onFilter }: { active: TwapFilter; onFilter: (filter: TwapFilter) => void }) {
+  return <div className="flex flex-wrap gap-2"><button className={pillClass(active === "spot")} onClick={() => onFilter("spot")}>SPOT</button><button className={pillClass(active === "perps")} onClick={() => onFilter("perps")}>PERPS</button><button className={pillClass(active === "combined")} onClick={() => onFilter("combined")}>S+P</button></div>;
+}
+
+function filterTwapRows(rows: HypeTwap[], filter: TwapFilter): HypeTwap[] {
+  if (filter === "combined") return rows;
+  const token = filter === "spot" ? "HYPE" : "HYPE-USD";
+  return rows.filter((row) => row.token === token);
+}
+
+function buildFilteredTwapPressure(rows: HypeTwap[]) {
+  return {
+    next1h: calculateFilteredTwapPressure(rows, 60 * 60 * 1000),
+    next24h: calculateFilteredTwapPressure(rows, 24 * 60 * 60 * 1000),
+  };
+}
+
+function calculateFilteredTwapPressure(rows: HypeTwap[], windowMs: number): number {
+  return rows.reduce((total, row) => {
+    const overlapMs = Math.max(0, Math.min(row.remainingMs, windowMs));
+    const pressure = (row.value / row.durationMs) * overlapMs;
+    return total + (row.side === "BUY" ? pressure : -pressure);
+  }, 0);
+}
+
+function Card({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+  return <section className="rounded-3xl border border-slate-700/50 bg-slate-950/60 p-5 shadow-2xl shadow-black/20 backdrop-blur"><div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><h2 className="text-xl font-semibold">{title}</h2>{action}</div>{children}</section>;
 }
 
 function TwapRow({ twap }: { twap: HypeTwap }) {

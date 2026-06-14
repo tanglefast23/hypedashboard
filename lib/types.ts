@@ -21,6 +21,8 @@ export type HypeMarket = {
 
 export type HypeTwap = {
   amount: number;
+  asset: number;
+  durationMs: number;
   endTime: number;
   hash: string;
   progress: number;
