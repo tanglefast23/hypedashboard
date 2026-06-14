@@ -2,6 +2,7 @@ import { z } from "zod";
 import { buildDailyVolumeBars, buildHourlyVolumeBars, buildLimitFillFlow, buildMarketFlow, buildWeeklyVolumeBars, FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, PERFORMANCE_TIMEFRAMES } from "./order-flow";
 import type { HeaderTimeframeId, TimeframeId } from "./order-flow";
 import { calculatePriceChangePercent } from "./price-change";
+import { collectHypeTrades, getStoredVenueFlows } from "./trade-history";
 import { buildTwapPressure, normalizeTwapRows } from "./twap";
 import type { Candle, DashboardData } from "./types";
 
@@ -160,19 +161,30 @@ function isHypeSpotMarket(market: Record<string, unknown>, hypeTokenIds: number[
 function isNumber(value: number | null): value is number { return value !== null; }
 
 async function getOrderFlow(price: number, candles: Candle[], monthlyCandles: Candle[]): Promise<DashboardData["orderFlow"]> {
-  return cached("order-flow-v3", 30_000, async () => {
-    const [perpTrades, spotTrades] = await Promise.all([
-      postHyperliquid({ type: "recentTrades", coin: "HYPE" }),
-      postHyperliquid({ type: "recentTrades", coin: "@107" }),
-    ]);
-    return {
-      hourlyVolume: buildHourlyVolumeBars(candles, price),
-      weeklyVolume: buildWeeklyVolumeBars(monthlyCandles),
-      dailyVolume: buildDailyVolumeBars(monthlyCandles),
-      perps: buildVenueFlow(z.array(z.unknown()).parse(perpTrades)),
-      spot: buildVenueFlow(z.array(z.unknown()).parse(spotTrades)),
-    };
+  await collectHypeTrades().catch((error) => console.warn("Trade collection failed", error));
+  const storedFlows = await getStoredVenueFlows().catch((error) => {
+    console.warn("Supabase trade history unavailable", error);
+    return null;
   });
+  const fallbackFlows = storedFlows ?? await getRecentTradeFallbackFlows();
+  return {
+    hourlyVolume: buildHourlyVolumeBars(candles, price),
+    weeklyVolume: buildWeeklyVolumeBars(monthlyCandles),
+    dailyVolume: buildDailyVolumeBars(monthlyCandles),
+    perps: fallbackFlows.perps,
+    spot: fallbackFlows.spot,
+  };
+}
+
+async function getRecentTradeFallbackFlows(): Promise<{ perps: DashboardData["orderFlow"]["perps"]; spot: DashboardData["orderFlow"]["spot"] }> {
+  const [perpTrades, spotTrades] = await Promise.all([
+    postHyperliquid({ type: "recentTrades", coin: "HYPE" }),
+    postHyperliquid({ type: "recentTrades", coin: "@107" }),
+  ]);
+  return {
+    perps: buildVenueFlow(z.array(z.unknown()).parse(perpTrades)),
+    spot: buildVenueFlow(z.array(z.unknown()).parse(spotTrades)),
+  };
 }
 
 function buildVenueFlow(trades: unknown[]) {

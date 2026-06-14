@@ -29,6 +29,17 @@ describe("order flow helpers", () => {
     expect(flow.sells).toEqual([{ price: 20, size: 3, time: now - 2 * 60_000, value: 60 }]);
   });
 
+  it("builds market buy and sell rows from stored Supabase trade rows", () => {
+    const trades = [
+      { side: "B" as const, price: 10, size: 2, time: now - 60_000, value: 20 },
+      { side: "A" as const, price: 20, size: 3, time: now - 2 * 60_000, value: 60 },
+    ];
+    const flow = buildMarketFlow(trades, 5 * 60_000, now);
+
+    expect(flow.buys).toEqual([{ price: 10, size: 2, time: now - 60_000, value: 20 }]);
+    expect(flow.sells).toEqual([{ price: 20, size: 3, time: now - 2 * 60_000, value: 60 }]);
+  });
+
   it("limits each trade side to the top 50 values", () => {
     const trades = Array.from({ length: 60 }, (_, i) => ({ side: "B" as const, px: String(i + 1), sz: "1", time: now - 60_000, tid: i }));
     const flow = buildMarketFlow(trades, 5 * 60_000, now);

@@ -126,8 +126,8 @@ function parseLevel(level: unknown, fallbackPrice: number): LimitOrderLevel {
 
 function parseTrade(trade: unknown): (MarketTrade & { side: "A" | "B" }) | null {
   if (!trade || typeof trade !== "object") return null;
-  const price = toNumber("px" in trade ? trade.px : null);
-  const size = toNumber("sz" in trade ? trade.sz : null);
+  const price = toNumber("px" in trade ? trade.px : "price" in trade ? trade.price : null);
+  const size = toNumber("sz" in trade ? trade.sz : "size" in trade ? trade.size : null);
   const time = toNumber("time" in trade ? trade.time : null);
   const side = "side" in trade && (trade.side === "A" || trade.side === "B") ? trade.side : null;
   if (price === null || size === null || time === null || side === null) return null;

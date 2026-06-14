@@ -27,6 +27,10 @@ export function Dashboard({ initialData }: Props) {
   }, []);
 
   const data = status.data ?? initialData;
+  const handleFlowFrame = (frame: FlowTimeframeId) => {
+    setFlowFrame(frame);
+    void refresh(setStatus);
+  };
 
   return (
     <main className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-5 md:px-8 md:py-8">
@@ -36,10 +40,10 @@ export function Dashboard({ initialData }: Props) {
       <HypeTwapPanel data={data} />
       <VolumeBarChart data={data} range={volumeRange} onRange={setVolumeRange} />
       <section className="grid gap-6 xl:grid-cols-2">
-        <OrderFlowCard frame={flowFrame} onFrame={setFlowFrame} title="Perps Market Buys / Sells" buys={data.orderFlow.perps.marketTrades[flowFrame].buys} sells={data.orderFlow.perps.marketTrades[flowFrame].sells} subtitle="Completed aggressive taker trades on HYPE perps." />
-        <OrderFlowCard frame={flowFrame} onFrame={setFlowFrame} title="Spot Market Buys / Sells" buys={data.orderFlow.spot.marketTrades[flowFrame].buys} sells={data.orderFlow.spot.marketTrades[flowFrame].sells} subtitle="Completed aggressive taker trades on HYPE/USDC spot." />
-        <OrderFlowCard frame={flowFrame} onFrame={setFlowFrame} title="Perps Filled Limit Buys / Sells" buys={data.orderFlow.perps.limitFills[flowFrame].buys} sells={data.orderFlow.perps.limitFills[flowFrame].sells} subtitle="Completed maker-side limit fills inferred from the HYPE perps tape." />
-        <OrderFlowCard frame={flowFrame} onFrame={setFlowFrame} title="Spot Filled Limit Buys / Sells" buys={data.orderFlow.spot.limitFills[flowFrame].buys} sells={data.orderFlow.spot.limitFills[flowFrame].sells} subtitle="Completed maker-side limit fills inferred from the HYPE/USDC spot tape." />
+        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Perps Market Buys / Sells" buys={data.orderFlow.perps.marketTrades[flowFrame].buys} sells={data.orderFlow.perps.marketTrades[flowFrame].sells} subtitle="Completed aggressive taker trades on HYPE perps." />
+        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Spot Market Buys / Sells" buys={data.orderFlow.spot.marketTrades[flowFrame].buys} sells={data.orderFlow.spot.marketTrades[flowFrame].sells} subtitle="Completed aggressive taker trades on HYPE/USDC spot." />
+        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Perps Filled Limit Buys / Sells" buys={data.orderFlow.perps.limitFills[flowFrame].buys} sells={data.orderFlow.perps.limitFills[flowFrame].sells} subtitle="Completed maker-side limit fills inferred from the HYPE perps tape." />
+        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Spot Filled Limit Buys / Sells" buys={data.orderFlow.spot.limitFills[flowFrame].buys} sells={data.orderFlow.spot.limitFills[flowFrame].sells} subtitle="Completed maker-side limit fills inferred from the HYPE/USDC spot tape." />
       </section>
     </main>
   );
@@ -48,7 +52,7 @@ export function Dashboard({ initialData }: Props) {
 async function refresh(setStatus: React.Dispatch<React.SetStateAction<Status>>) {
   setStatus((current) => ({ ...current, loading: true, error: null }));
   try {
-    const response = await fetch("/api/dashboard", { cache: "no-store" });
+    const response = await fetch(`/api/dashboard?t=${Date.now()}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`Dashboard refresh failed: ${response.status}`);
     const data = await response.json() as DashboardData;
     setStatus({ data, error: null, loading: false });
