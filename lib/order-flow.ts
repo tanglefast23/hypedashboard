@@ -1,4 +1,5 @@
 export type TimeframeId = "5m" | "15m" | "30m" | "1h" | "4h" | "12h" | "1d";
+export type HeaderTimeframeId = "30m" | "1h" | "1d" | "1w";
 export type FlowTimeframeId = "5m" | "15m" | "30m" | "1h" | "4h" | "1d";
 
 export type LimitOrderLevel = {
@@ -32,6 +33,13 @@ export const PERFORMANCE_TIMEFRAMES: { id: TimeframeId; label: string; durationM
 ];
 
 export const FLOW_TIMEFRAMES = PERFORMANCE_TIMEFRAMES.filter((item) => item.id !== "12h") as { id: FlowTimeframeId; label: string; durationMs: number }[];
+
+export const HEADER_TIMEFRAMES: { id: HeaderTimeframeId; label: string; durationMs: number }[] = [
+  { id: "30m", label: "30M", durationMs: 30 * 60_000 },
+  { id: "1h", label: "1H", durationMs: 60 * 60_000 },
+  { id: "1d", label: "1D", durationMs: 24 * 60 * 60_000 },
+  { id: "1w", label: "1W", durationMs: 7 * 24 * 60 * 60_000 },
+];
 
 export function normalizeL2Book(raw: unknown, fallbackPrice: number): { buys: LimitOrderLevel[]; sells: LimitOrderLevel[] } {
   const levels = readLevels(raw);

@@ -2,7 +2,7 @@
 
 import { RefreshCcw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { FLOW_TIMEFRAMES, PERFORMANCE_TIMEFRAMES, type FlowTimeframeId, type LimitOrderLevel, type MarketTrade } from "../lib/order-flow";
+import { FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, PERFORMANCE_TIMEFRAMES, type FlowTimeframeId, type HeaderTimeframeId, type LimitOrderLevel, type MarketTrade } from "../lib/order-flow";
 import { formatCompactUsd, formatNumber, formatPercent, formatUsd } from "../lib/format";
 import type { DashboardData, HypeTwap } from "../lib/types";
 
@@ -54,12 +54,23 @@ async function refresh(setStatus: React.Dispatch<React.SetStateAction<Status>>) 
 function Header({ data, loading, onRefresh }: { data: DashboardData; loading: boolean; onRefresh: () => void }) {
   return (
     <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-      <div className="flex items-end gap-4"><h1 className="text-4xl font-semibold tracking-tight md:text-6xl">HYPE</h1><p className="mono pb-1 text-3xl font-semibold text-emerald-300 md:text-5xl">{formatUsd(data.hype.price, 4)}</p></div>
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:gap-4"><h1 className="text-4xl font-semibold tracking-tight md:text-6xl">HYPE</h1><div className="flex flex-wrap items-baseline gap-x-3 gap-y-2"><p className="mono text-3xl font-semibold text-emerald-300 md:text-5xl">{formatUsd(data.hype.price, 4)}</p><HeaderChangePills changes={data.hype.headerChanges} /></div></div>
       <button className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-700/80 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800" onClick={onRefresh}>
         <RefreshCcw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
         <span className="mono">{new Date(data.generatedAt).toLocaleTimeString()}</span>
       </button>
     </header>
+  );
+}
+
+function HeaderChangePills({ changes }: { changes: Record<HeaderTimeframeId, number | null> }) {
+  return (
+    <div className="flex flex-wrap gap-2 pb-1">
+      {HEADER_TIMEFRAMES.map((frame) => {
+        const value = changes[frame.id];
+        return <span className={`mono rounded-full border border-slate-800 bg-slate-900/70 px-2.5 py-1 text-xs font-semibold ${valueTone(value)}`} key={frame.id}>({frame.label} {formatPercent(value)})</span>;
+      })}
+    </div>
   );
 }
 
