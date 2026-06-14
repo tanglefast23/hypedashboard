@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { buildHourlyVolumeBars, buildMarketFlow, FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, normalizeL2Book, PERFORMANCE_TIMEFRAMES } from "./order-flow";
-import type { FlowTimeframeId, HeaderTimeframeId, TimeframeId } from "./order-flow";
+import type { HeaderTimeframeId, TimeframeId } from "./order-flow";
 import { calculatePriceChangePercent } from "./price-change";
 import { buildTwapPressure, normalizeTwapRows } from "./twap";
 import type { Candle, DashboardData } from "./types";
@@ -151,20 +151,32 @@ function isHypeSpotMarket(market: Record<string, unknown>, hypeTokenIds: number[
 function isNumber(value: number | null): value is number { return value !== null; }
 
 async function getOrderFlow(price: number, candles: Candle[]): Promise<DashboardData["orderFlow"]> {
-  return cached("order-flow", 30_000, async () => {
-    const [bookRaw, tradesRaw] = await Promise.all([
-      postHyperliquid({ type: "l2Book", coin: "HYPE" }),
+  return cached("order-flow-v2", 30_000, async () => {
+    const [perpBook, perpTrades, spotBook, spotTrades] = await Promise.all([
+      getVenueOrderFlow("HYPE", price),
       postHyperliquid({ type: "recentTrades", coin: "HYPE" }),
+      getVenueOrderFlow("@107", price),
+      postHyperliquid({ type: "recentTrades", coin: "@107" }),
     ]);
-    const book = normalizeL2Book(bookRaw, price);
-    const trades = z.array(z.unknown()).parse(tradesRaw);
-    const now = Date.now();
     return {
       hourlyVolume: buildHourlyVolumeBars(candles, price),
-      limitBook: Object.fromEntries(FLOW_TIMEFRAMES.map((frame) => [frame.id, book])) as Record<FlowTimeframeId, typeof book>,
-      marketTrades: Object.fromEntries(FLOW_TIMEFRAMES.map((frame) => [frame.id, buildMarketFlow(trades, frame.durationMs, now)])) as DashboardData["orderFlow"]["marketTrades"],
+      perps: buildVenueFlow(perpBook, z.array(z.unknown()).parse(perpTrades)),
+      spot: buildVenueFlow(spotBook, z.array(z.unknown()).parse(spotTrades)),
     };
   });
+}
+
+async function getVenueOrderFlow(coin: "HYPE" | "@107", price: number) {
+  const bookRaw = await postHyperliquid({ type: "l2Book", coin });
+  return normalizeL2Book(bookRaw, price);
+}
+
+function buildVenueFlow(book: ReturnType<typeof normalizeL2Book>, trades: unknown[]) {
+  const now = Date.now();
+  return {
+    limitBook: Object.fromEntries(FLOW_TIMEFRAMES.map((frame) => [frame.id, book])) as DashboardData["orderFlow"]["perps"]["limitBook"],
+    marketTrades: Object.fromEntries(FLOW_TIMEFRAMES.map((frame) => [frame.id, buildMarketFlow(trades, frame.durationMs, now)])) as DashboardData["orderFlow"]["perps"]["marketTrades"],
+  };
 }
 
 export async function getDashboardData(): Promise<DashboardData> {

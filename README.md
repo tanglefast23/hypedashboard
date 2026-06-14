@@ -8,8 +8,8 @@ A public, read-only, desktop-first dashboard for HYPE token flow and Hyperliquid
 - First row: 5M, 15M, 30M, 1H, 4H, 12H, and 1D percentage change
 - Second row: volume for the same time periods
 - 24 hourly volume bars for the past day
-- Top 15 HYPE limit buys/sells with timeframe pills
-- Top 15 HYPE market buys/sells with timeframe pills
+- Separate HYPE perps and HYPE/USDC spot limit buy/sell book panels with timeframe pills
+- Separate HYPE perps and HYPE/USDC spot recent market buy/sell trade panels with timeframe pills
 - Live HYPE TWAP buy pressure for the next 1h and 24h, plus active HYPE TWAP rows
 - No wallet connect, auth, database, or trading actions
 
@@ -22,7 +22,7 @@ A public, read-only, desktop-first dashboard for HYPE token flow and Hyperliquid
 
 ## Refresh / rate limits
 
-The dashboard refreshes every 30 seconds and Vercel caches `/api/dashboard` for 30 seconds with 90 seconds stale-while-revalidate. This keeps the UI fresh without hammering Hyperliquid's public API.
+The dashboard refreshes every 30 seconds and Vercel caches `/api/dashboard` for 30 seconds with 90 seconds stale-while-revalidate. This keeps the UI fresh without hammering Hyperliquid's public API. Hyperliquid `recentTrades` returns only the latest public trades, not a full historical 1D trade tape; full-day market trade rows require storing trades over time.
 
 ## Local development
 

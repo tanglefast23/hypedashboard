@@ -40,10 +40,15 @@ export type HypeTwapData = {
   rows: HypeTwap[];
 };
 
-export type OrderFlowData = {
-  hourlyVolume: HourlyVolumeBar[];
+export type VenueOrderFlowData = {
   limitBook: Record<FlowTimeframeId, { buys: LimitOrderLevel[]; sells: LimitOrderLevel[] }>;
   marketTrades: Record<FlowTimeframeId, { buys: MarketTrade[]; sells: MarketTrade[] }>;
+};
+
+export type OrderFlowData = {
+  hourlyVolume: HourlyVolumeBar[];
+  perps: VenueOrderFlowData;
+  spot: VenueOrderFlowData;
 };
 
 export type DashboardData = {

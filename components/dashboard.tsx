@@ -35,8 +35,10 @@ export function Dashboard({ initialData }: Props) {
       <PerformanceGrid data={data} />
       <VolumeBarChart data={data} />
       <section className="grid gap-6 xl:grid-cols-2">
-        <OrderFlowCard frame={limitFrame} kind="limit" onFrame={setLimitFrame} seenMap={seenMap} title="Limit Buys / Sells" buys={data.orderFlow.limitBook[limitFrame].buys} sells={data.orderFlow.limitBook[limitFrame].sells} />
-        <OrderFlowCard frame={marketFrame} kind="market" onFrame={setMarketFrame} seenMap={seenMap} title="Market Buys / Sells" buys={data.orderFlow.marketTrades[marketFrame].buys} sells={data.orderFlow.marketTrades[marketFrame].sells} />
+        <OrderFlowCard frame={limitFrame} kind="limit" onFrame={setLimitFrame} seenMap={seenMap} title="Perps Limit Buys / Sells" buys={data.orderFlow.perps.limitBook[limitFrame].buys} sells={data.orderFlow.perps.limitBook[limitFrame].sells} venue="HYPE perps" />
+        <OrderFlowCard frame={limitFrame} kind="limit" onFrame={setLimitFrame} seenMap={seenMap} title="Spot Limit Buys / Sells" buys={data.orderFlow.spot.limitBook[limitFrame].buys} sells={data.orderFlow.spot.limitBook[limitFrame].sells} venue="HYPE/USDC spot" />
+        <OrderFlowCard frame={marketFrame} kind="market" onFrame={setMarketFrame} seenMap={seenMap} title="Perps Market Buys / Sells" buys={data.orderFlow.perps.marketTrades[marketFrame].buys} sells={data.orderFlow.perps.marketTrades[marketFrame].sells} venue="HYPE perps" />
+        <OrderFlowCard frame={marketFrame} kind="market" onFrame={setMarketFrame} seenMap={seenMap} title="Spot Market Buys / Sells" buys={data.orderFlow.spot.marketTrades[marketFrame].buys} sells={data.orderFlow.spot.marketTrades[marketFrame].sells} venue="HYPE/USDC spot" />
       </section>
       <section className="grid gap-6 xl:grid-cols-[minmax(360px,0.72fr)_minmax(0,1.28fr)]">
         <HypeTwapPanel data={data} />
@@ -112,10 +114,10 @@ function VolumeBarChart({ data }: { data: DashboardData }) {
   );
 }
 
-function OrderFlowCard({ buys, frame, kind, onFrame, seenMap, sells, title }: { buys: LimitOrderLevel[] | MarketTrade[]; frame: FlowTimeframeId; kind: "limit" | "market"; onFrame: (frame: FlowTimeframeId) => void; seenMap: SeenMap; sells: LimitOrderLevel[] | MarketTrade[]; title: string }) {
+function OrderFlowCard({ buys, frame, kind, onFrame, seenMap, sells, title, venue }: { buys: LimitOrderLevel[] | MarketTrade[]; frame: FlowTimeframeId; kind: "limit" | "market"; onFrame: (frame: FlowTimeframeId) => void; seenMap: SeenMap; sells: LimitOrderLevel[] | MarketTrade[]; title: string; venue: string }) {
   return (
     <section className="rounded-3xl border border-slate-700/50 bg-slate-950/60 p-5 shadow-2xl shadow-black/20 backdrop-blur">
-      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div><h2 className="text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-slate-400">Top 15 HYPE {kind === "limit" ? "book levels" : "executed trades"}.</p></div><Pills active={frame} onFrame={onFrame} /></div>
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div><h2 className="text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-slate-400">Top 15 {venue} {kind === "limit" ? "book levels" : "recent executed trades"}.</p></div><Pills active={frame} onFrame={onFrame} /></div>
       <div className="grid gap-4 md:grid-cols-2"><FlowTable kind={kind} rows={buys} seenMap={seenMap} side="BUY" /><FlowTable kind={kind} rows={sells} seenMap={seenMap} side="SELL" /></div>
     </section>
   );
@@ -174,9 +176,11 @@ function seenKey(side: "BUY" | "SELL", row: LimitOrderLevel | MarketTrade): stri
 function addLimitRowsToSeenMap(current: SeenMap, data: DashboardData): SeenMap {
   const now = Date.now();
   const next = { ...current };
-  Object.values(data.orderFlow.limitBook).forEach((book) => {
-    book.buys.forEach((row) => { next[seenKey("BUY", row)] ??= now; });
-    book.sells.forEach((row) => { next[seenKey("SELL", row)] ??= now; });
+  [data.orderFlow.perps, data.orderFlow.spot].forEach((venue) => {
+    Object.values(venue.limitBook).forEach((book) => {
+      book.buys.forEach((row) => { next[seenKey("BUY", row)] ??= now; });
+      book.sells.forEach((row) => { next[seenKey("SELL", row)] ??= now; });
+    });
   });
   return next;
 }
