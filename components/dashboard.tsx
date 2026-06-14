@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 type SortKey = "date" | "price" | "size" | "value";
 type SortDirection = "asc" | "desc";
 type SortState = { key: SortKey; direction: SortDirection } | null;
-type VolumeRange = "day" | "month";
+type VolumeRange = "day" | "week" | "month";
 import { FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, PERFORMANCE_TIMEFRAMES, type FlowTimeframeId, type HeaderTimeframeId, type MarketTrade } from "../lib/order-flow";
 import { formatCompactUsd, formatCompactUsdOneDecimal, formatNumber, formatPercent, formatUsd } from "../lib/format";
 import type { DashboardData, HypeTwap } from "../lib/types";
@@ -103,9 +103,9 @@ function MetricTile({ label, tone, value }: { label: string; tone: string; value
 }
 
 function VolumeBarChart({ data, onRange, range }: { data: DashboardData; onRange: (range: VolumeRange) => void; range: VolumeRange }) {
-  const bars = range === "day" ? data.orderFlow.hourlyVolume : data.orderFlow.dailyVolume;
+  const bars = getVolumeBars(data, range);
   const max = Math.max(...bars.map((bar) => bar.volumeUsd), 1);
-  const subtitle = range === "day" ? "Last 24 one-hour bars from Hyperliquid candles." : "Last 30 daily bars from Hyperliquid candles.";
+  const subtitle = getVolumeSubtitle(range);
   return (
     <section className="rounded-3xl border border-slate-700/50 bg-slate-950/60 p-5 shadow-2xl shadow-black/20 backdrop-blur">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-semibold">HYPE Volume</h2><p className="mt-1 text-sm text-slate-400">{subtitle}</p></div><VolumeRangePills active={range} onRange={onRange} /></div>
@@ -114,8 +114,20 @@ function VolumeBarChart({ data, onRange, range }: { data: DashboardData; onRange
   );
 }
 
+function getVolumeBars(data: DashboardData, range: VolumeRange) {
+  if (range === "day") return data.orderFlow.hourlyVolume;
+  if (range === "week") return data.orderFlow.weeklyVolume;
+  return data.orderFlow.dailyVolume;
+}
+
+function getVolumeSubtitle(range: VolumeRange): string {
+  if (range === "day") return "Last 24 one-hour bars from Hyperliquid candles.";
+  if (range === "week") return "Last 7 daily bars from Hyperliquid candles.";
+  return "Last 30 daily bars from Hyperliquid candles.";
+}
+
 function VolumeRangePills({ active, onRange }: { active: VolumeRange; onRange: (range: VolumeRange) => void }) {
-  return <div className="flex gap-2"><button className={pillClass(active === "day")} onClick={() => onRange("day")}>Day</button><button className={pillClass(active === "month")} onClick={() => onRange("month")}>Month</button></div>;
+  return <div className="flex gap-2"><button className={pillClass(active === "day")} onClick={() => onRange("day")}>Day</button><button className={pillClass(active === "week")} onClick={() => onRange("week")}>Week</button><button className={pillClass(active === "month")} onClick={() => onRange("month")}>Month</button></div>;
 }
 
 function OrderFlowCard({ buys, frame, onFrame, sells, subtitle, title }: { buys: MarketTrade[]; frame: FlowTimeframeId; onFrame: (frame: FlowTimeframeId) => void; sells: MarketTrade[]; subtitle: string; title: string }) {

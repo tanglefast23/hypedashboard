@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { buildDailyVolumeBars, buildHourlyVolumeBars, buildLimitFillFlow, buildMarketFlow, FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, PERFORMANCE_TIMEFRAMES } from "./order-flow";
+import { buildDailyVolumeBars, buildHourlyVolumeBars, buildLimitFillFlow, buildMarketFlow, buildWeeklyVolumeBars, FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, PERFORMANCE_TIMEFRAMES } from "./order-flow";
 import type { HeaderTimeframeId, TimeframeId } from "./order-flow";
 import { calculatePriceChangePercent } from "./price-change";
 import { buildTwapPressure, normalizeTwapRows } from "./twap";
@@ -167,6 +167,7 @@ async function getOrderFlow(price: number, candles: Candle[], monthlyCandles: Ca
     ]);
     return {
       hourlyVolume: buildHourlyVolumeBars(candles, price),
+      weeklyVolume: buildWeeklyVolumeBars(monthlyCandles),
       dailyVolume: buildDailyVolumeBars(monthlyCandles),
       perps: buildVenueFlow(z.array(z.unknown()).parse(perpTrades)),
       spot: buildVenueFlow(z.array(z.unknown()).parse(spotTrades)),

@@ -47,6 +47,7 @@ export type VenueOrderFlowData = {
 
 export type OrderFlowData = {
   hourlyVolume: VolumeBar[];
+  weeklyVolume: VolumeBar[];
   dailyVolume: VolumeBar[];
   perps: VenueOrderFlowData;
   spot: VenueOrderFlowData;

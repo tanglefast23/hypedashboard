@@ -80,11 +80,23 @@ export function buildHourlyVolumeBars(candles: { time: number; volume: number }[
 }
 
 export function buildDailyVolumeBars(candles: { close: number; time: number; volume: number }[]): HourlyVolumeBar[] {
-  return candles.slice(-30).map((candle) => ({
-    label: formatDayLabel(candle.time),
+  return candles.slice(-30).map((candle) => buildDailyBar(candle, formatDayLabel));
+}
+
+export function buildWeeklyVolumeBars(candles: { close: number; time: number; volume: number }[]): HourlyVolumeBar[] {
+  return candles.slice(-7).map((candle) => buildDailyBar(candle, formatWeekdayLabel));
+}
+
+function buildDailyBar(candle: { close: number; time: number; volume: number }, labeler: (timeSeconds: number) => string): HourlyVolumeBar {
+  return {
+    label: labeler(candle.time),
     volume: candle.volume,
     volumeUsd: candle.volume * candle.close,
-  }));
+  };
+}
+
+function formatWeekdayLabel(timeSeconds: number): string {
+  return new Date(timeSeconds * 1000).toLocaleString("en-US", { timeZone: "UTC", weekday: "short" });
 }
 
 function formatDayLabel(timeSeconds: number): string {

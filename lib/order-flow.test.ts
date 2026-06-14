@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDailyVolumeBars, buildHourlyVolumeBars, buildLimitFillFlow, buildMarketFlow, HEADER_TIMEFRAMES, normalizeL2Book } from "./order-flow";
+import { buildDailyVolumeBars, buildHourlyVolumeBars, buildLimitFillFlow, buildMarketFlow, buildWeeklyVolumeBars, HEADER_TIMEFRAMES, normalizeL2Book } from "./order-flow";
 
 const now = 1_000_000;
 
@@ -58,5 +58,15 @@ describe("order flow helpers", () => {
     expect(bars[0]).toMatchObject({ label: "27", volume: 1, volumeUsd: 10 });
     expect(bars[2].label).toBe("Mar 1");
     expect(bars[29].volumeUsd).toBe(300);
+  });
+
+  it("creates 7 weekly volume bars with weekday labels", () => {
+    const start = Date.UTC(2026, 5, 8) / 1000;
+    const candles = Array.from({ length: 7 }, (_, i) => ({ close: 10, time: start + i * 86_400, volume: i + 1 }));
+    const bars = buildWeeklyVolumeBars(candles);
+
+    expect(bars).toHaveLength(7);
+    expect(bars.map((bar) => bar.label)).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+    expect(bars[6].volumeUsd).toBe(70);
   });
 });
