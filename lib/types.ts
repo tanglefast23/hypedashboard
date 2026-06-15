@@ -57,6 +57,8 @@ export type OrderFlowData = {
 
 export type AccountPerpPosition = {
   coin: string;
+  dex: string;
+  displayCoin: string;
   entryPx: number | null;
   liquidationPx: number | null;
   marginUsed: number | null;
@@ -76,6 +78,25 @@ export type AccountPerpTwapGroup = {
 export type AccountPerpWatchData = {
   address: string;
   groups: AccountPerpTwapGroup[];
+};
+
+export type HoldingDashboardData = {
+  generatedAt: string;
+  asset: {
+    coin: string;
+    price: number;
+    headerChanges: Record<HeaderTimeframeId, number | null>;
+    changes: Record<TimeframeId, number | null>;
+    volumes: Record<TimeframeId, number | null>;
+  };
+  position: AccountPerpPosition | null;
+  twaps: HypeTwapData;
+  volume: {
+    hourlyVolume: VolumeBar[];
+    weeklyVolume: VolumeBar[];
+    dailyVolume: VolumeBar[];
+  };
+  holdings: AccountPerpWatchData;
 };
 
 export type DashboardData = {

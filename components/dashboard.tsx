@@ -1,6 +1,7 @@
 "use client";
 
-import { RefreshCcw } from "lucide-react";
+import Link from "next/link";
+import { List, RefreshCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 
 type SortKey = "date" | "price" | "size" | "value";
@@ -46,7 +47,6 @@ export function Dashboard({ initialData }: Props) {
         <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Perps Filled Limit Buys / Sells" buys={data.orderFlow.perps.limitFills[flowFrame].buys} sells={data.orderFlow.perps.limitFills[flowFrame].sells} subtitle="Completed maker-side limit fills inferred from the HYPE perps tape." />
         <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Spot Filled Limit Buys / Sells" buys={data.orderFlow.spot.limitFills[flowFrame].buys} sells={data.orderFlow.spot.limitFills[flowFrame].sells} subtitle="Completed maker-side limit fills inferred from the HYPE/USDC spot tape." />
       </section>
-      <AccountPerpTwapPanel data={data} />
     </main>
   );
 }
@@ -65,13 +65,36 @@ async function refresh(setStatus: React.Dispatch<React.SetStateAction<Status>>) 
 }
 
 function Header({ data, loading, onRefresh }: { data: DashboardData; loading: boolean; onRefresh: () => void }) {
+  const [open, setOpen] = useState(false);
   return (
     <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:gap-4"><h1 className="text-4xl font-semibold tracking-tight md:text-6xl">HYPE</h1><div className="flex flex-wrap items-baseline gap-x-3 gap-y-2"><p className="mono text-3xl font-semibold text-emerald-300 md:text-5xl">{formatUsd(data.hype.price, 4)}</p><HeaderChangePills changes={data.hype.headerChanges} /></div></div>
-      <button aria-label="Refresh dashboard" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-700/80 bg-slate-900/60 text-slate-200 hover:bg-slate-800" onClick={onRefresh}>
-        <RefreshCcw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-      </button>
+      <div className="relative flex gap-2 self-start md:self-auto">
+        <button aria-label="Show watched holdings" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-700/80 bg-slate-900/60 text-slate-200 hover:bg-slate-800" onClick={() => setOpen((value) => !value)}>
+          <List className="h-4 w-4" />
+        </button>
+        <button aria-label="Refresh dashboard" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-700/80 bg-slate-900/60 text-slate-200 hover:bg-slate-800" onClick={onRefresh}>
+          <RefreshCcw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+        </button>
+        {open ? <HoldingsMenu data={data} /> : null}
+      </div>
     </header>
+  );
+}
+
+function HoldingsMenu({ data }: { data: DashboardData }) {
+  return (
+    <div className="absolute right-0 top-12 z-20 w-80 rounded-2xl border border-slate-700 bg-slate-950/95 p-3 shadow-2xl shadow-black/50 backdrop-blur">
+      <div className="mb-2 flex items-center justify-between"><p className="text-sm font-semibold">Watched holdings</p><span className="mono text-xs text-slate-500">{data.accountPerps.groups.length}</span></div>
+      <div className="space-y-2">
+        {data.accountPerps.groups.length ? data.accountPerps.groups.map((group) => (
+          <Link className="block rounded-xl border border-slate-800 bg-slate-900/60 p-3 hover:border-emerald-400/50" href={`/holdings/${encodeURIComponent(group.coin)}`} key={group.coin}>
+            <div className="flex items-center justify-between gap-3"><span className="font-semibold">{group.position.displayCoin}</span><span className={`mono text-xs ${group.position.side === "LONG" ? "text-emerald-300" : "text-rose-300"}`}>{group.position.side}</span></div>
+            <div className="mt-1 flex items-center justify-between text-xs text-slate-400"><span>{formatNumber(group.position.size)} {group.position.displayCoin}</span><span>{formatCompactUsd(group.position.positionValue)}</span></div>
+          </Link>
+        )) : <p className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-sm text-slate-500">No open perp holdings found.</p>}
+      </div>
+    </div>
   );
 }
 
@@ -193,46 +216,6 @@ function formatElapsed(timestamp: number): string {
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = Math.floor(minutes % 60);
   return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
-}
-
-function AccountPerpTwapPanel({ data }: { data: DashboardData }) {
-  const now = useSecondTicker();
-  const snapshotTime = Date.parse(data.generatedAt);
-  return (
-    <Card title="Watched Account Perp TWAPs" action={<span className="mono text-xs text-slate-500">{shortAddress(data.accountPerps.address)}</span>}>
-      {data.accountPerps.groups.length ? <div className="space-y-4">{data.accountPerps.groups.map((group) => <AccountPerpGroup group={group} key={group.coin} now={now} snapshotTime={snapshotTime} />)}</div> : <p className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-500">No open perp positions found for this address.</p>}
-    </Card>
-  );
-}
-
-function AccountPerpGroup({ group, now, snapshotTime }: { group: DashboardData["accountPerps"]["groups"][number]; now: number; snapshotTime: number }) {
-  const rows = group.rows.map((twap) => liveTwap(twap, now, snapshotTime));
-  const pressure = buildFilteredTwapPressure(rows);
-  return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
-      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <div className="flex items-center gap-2"><h3 className="text-lg font-semibold">{group.coin} Perp</h3><span className={`mono rounded-full border px-2 py-1 text-xs ${group.position.side === "LONG" ? "border-emerald-400/40 text-emerald-300" : "border-rose-400/40 text-rose-300"}`}>{group.position.side}</span></div>
-          <p className="mt-1 text-sm text-slate-400">Size {formatNumber(group.position.size)} · Value {formatCompactUsd(group.position.positionValue)} · PnL <span className={valueTone(group.position.unrealizedPnl)}>{signedUsd(group.position.unrealizedPnl ?? 0)}</span></p>
-        </div>
-        <div className="mono text-xs text-slate-500">Entry {group.position.entryPx ? formatUsd(group.position.entryPx, 4) : "—"} · Liq {group.position.liquidationPx ? formatUsd(group.position.liquidationPx, 4) : "—"}</div>
-      </div>
-      <div className="grid gap-5 lg:grid-cols-[minmax(220px,0.32fr)_minmax(0,0.68fr)]">
-        <div className="grid grid-cols-2 gap-3">
-          <TwapStat label="Next 5m" value={signedUsd(pressure.next5m)} tone={valueTone(pressure.next5m)} />
-          <TwapStat label="Next 15m" value={signedUsd(pressure.next15m)} tone={valueTone(pressure.next15m)} />
-          <TwapStat label="Next 1h" value={signedUsd(pressure.next1h)} tone={valueTone(pressure.next1h)} />
-          <TwapStat label="Next 24h" value={signedUsd(pressure.next24h)} tone={valueTone(pressure.next24h)} />
-        </div>
-        <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-950/30 p-4">
-          <div className="mb-3 flex items-center justify-between text-sm"><span className="text-slate-400">Active {group.coin} Perp TWAPs</span><span className="mono text-slate-500">{rows.length}</span></div>
-          <div className="max-h-52 space-y-3 overflow-y-auto pr-2">
-            {rows.length ? rows.map((twap) => <TwapRow key={twap.hash} twap={twap} />) : <p className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-500">No active {group.coin} perp TWAPs right now.</p>}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
 }
 
 function HypeTwapPanel({ data }: { data: DashboardData }) {
