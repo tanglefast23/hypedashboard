@@ -1,3 +1,4 @@
+import { getStoredCrowdingBars } from "./crowding-history";
 import type { DashboardData } from "./types";
 
 export type CrowdingRange = "day" | "week" | "month";
@@ -15,6 +16,12 @@ const HYPERLIQUID_INFO_URLS = ["https://api.hyperliquid.xyz/info", "https://api-
 const PRICE_FALLBACK = 1;
 
 export async function getCrowdingData(input: { hypePrice: number; orderFlow: DashboardData["orderFlow"]; priceChange1d: number | null; twaps: DashboardData["twaps"] }): Promise<DashboardData["crowding"]> {
+  const current = await getCurrentCrowdingData(input);
+  const storedBars = await getStoredCrowdingBars().catch(() => null);
+  return storedBars ? { ...current, bars: { ...current.bars, ...storedBars } } : current;
+}
+
+export async function getCurrentCrowdingData(input: { hypePrice: number; orderFlow: DashboardData["orderFlow"]; priceChange1d: number | null; twaps: DashboardData["twaps"] }): Promise<DashboardData["crowding"]> {
   const [venues, oiHistory] = await Promise.all([getVenueSnapshots(input.hypePrice), getOiHistory(input.hypePrice)]);
   const oiFundingScore = fundingCrowdingScore(venues);
   const liquidationScore = 0;

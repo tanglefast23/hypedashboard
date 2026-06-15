@@ -164,7 +164,7 @@ function CrowdingPanel({ data, onRange, range }: { data: DashboardData; onRange:
         </div>
       </div>
       <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-semibold">Crowding History</h2><p className="mt-1 text-sm text-slate-400">Direct free APIs where history exists; current OI fills broader venue count.</p></div><VolumeRangePills active={range} onRange={onRange} /></div>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-semibold">Crowding History</h2><p className="mt-1 text-sm text-slate-400">Supabase snapshots when available; free OI history fills until enough data accumulates.</p></div><VolumeRangePills active={range} onRange={onRange} /></div>
         <div className="flex h-52 items-center gap-1 sm:gap-2">{bars.map((bar, index) => <CrowdingBar key={`${bar.label}-${index}`} bar={bar} maxAbs={maxAbs} />)}</div>
       </div>
     </section>
