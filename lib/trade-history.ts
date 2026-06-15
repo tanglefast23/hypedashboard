@@ -146,6 +146,7 @@ async function postHyperliquid(body: Record<string, unknown>): Promise<unknown> 
 async function supabaseFetch(config: SupabaseConfig, path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${config.url}/rest/v1/${path}`, {
     ...init,
+    cache: "no-store",
     headers: { apikey: config.key, authorization: `Bearer ${config.key}`, "content-type": "application/json", ...(init.headers ?? {}) },
   });
 }

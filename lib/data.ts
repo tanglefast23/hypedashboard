@@ -387,7 +387,7 @@ async function getAssetMarket(coin: string, priceCandles: Candle[], headerCandle
 
 function emptyVenueFlow(): DashboardData["orderFlow"]["spot"] {
   return {
-    marketTrades: Object.fromEntries(FLOW_TIMEFRAMES.map((frame) => [frame.id, { buys: [], sells: [] }])) as unknown as DashboardData["orderFlow"]["spot"]["marketTrades"],
+    marketTrades: Object.fromEntries(FLOW_TIMEFRAMES.map((frame) => [frame.id, { buyUsd: 0, buys: [], netUsd: 0, sellUsd: 0, sells: [] }])) as unknown as DashboardData["orderFlow"]["spot"]["marketTrades"],
     limitFills: Object.fromEntries(FLOW_TIMEFRAMES.map((frame) => [frame.id, { buys: [], sells: [] }])) as unknown as DashboardData["orderFlow"]["spot"]["limitFills"],
   };
 }
