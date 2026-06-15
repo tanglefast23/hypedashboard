@@ -1,4 +1,5 @@
-import { buildLimitFillFlow, buildMarketFlow, FLOW_TIMEFRAMES } from "./order-flow";
+import { buildLimitFillFlow, FLOW_TIMEFRAMES } from "./order-flow";
+import type { MarketFlow } from "./order-flow";
 import type { DashboardData } from "./types";
 
 const HYPERLIQUID_INFO_URLS = ["https://api.hyperliquid.xyz/info", "https://api-ui.hyperliquid.xyz/info"];
@@ -38,10 +39,22 @@ function getSupabaseConfig(): SupabaseConfig | null {
 
 async function buildStoredVenueFlow(config: SupabaseConfig, venue: Venue): Promise<VenueFlow> {
   const now = Date.now();
-  const entries = await Promise.all(FLOW_TIMEFRAMES.map(async (frame) => [frame.id, await getFrameTrades(config, venue, frame.durationMs, now)] as const));
-  const marketTrades = Object.fromEntries(entries.map(([id, trades]) => [id, buildMarketFlow(trades, Number.POSITIVE_INFINITY, now)])) as VenueFlow["marketTrades"];
-  const limitFills = Object.fromEntries(entries.map(([id, trades]) => [id, buildLimitFillFlow(trades, Number.POSITIVE_INFINITY, now)])) as VenueFlow["limitFills"];
+  const entries = await Promise.all(FLOW_TIMEFRAMES.map(async (frame) => [frame.id, await getFrameMarketFlow(config, venue, frame.durationMs, now)] as const));
+  const fillEntries = await Promise.all(FLOW_TIMEFRAMES.map(async (frame) => [frame.id, await getFrameTrades(config, venue, frame.durationMs, now)] as const));
+  const marketTrades = Object.fromEntries(entries) as VenueFlow["marketTrades"];
+  const limitFills = Object.fromEntries(fillEntries.map(([id, trades]) => [id, buildLimitFillFlow(trades, Number.POSITIVE_INFINITY, now)])) as VenueFlow["limitFills"];
   return { marketTrades, limitFills };
+}
+
+async function getFrameMarketFlow(config: SupabaseConfig, venue: Venue, durationMs: number, now: number): Promise<MarketFlow> {
+  const since = new Date(now - durationMs).toISOString();
+  const [buys, sells, buyUsd, sellUsd] = await Promise.all([
+    queryTopFrameSide(config, venue, "B", since),
+    queryTopFrameSide(config, venue, "A", since),
+    queryFrameSideTotal(config, venue, "B", since),
+    queryFrameSideTotal(config, venue, "A", since),
+  ]);
+  return { buyUsd, buys, netUsd: buyUsd - sellUsd, sellUsd, sells };
 }
 
 async function getFrameTrades(config: SupabaseConfig, venue: Venue, durationMs: number, now: number): Promise<StoredTrade[]> {
@@ -54,30 +67,32 @@ async function getFrameTrades(config: SupabaseConfig, venue: Venue, durationMs: 
 }
 
 async function queryFrameSide(config: SupabaseConfig, venue: Venue, side: TradeSide, since: string): Promise<StoredTrade[]> {
-  const rows: StoredTrade[] = [];
-  const pageSize = 1000;
-  for (let offset = 0; offset < 10_000; offset += pageSize) {
-    const page = await queryFrameSidePage(config, venue, side, since, pageSize, offset);
-    rows.push(...page);
-    if (page.length < pageSize) return rows;
-  }
-  return rows;
+  return queryTopFrameSide(config, venue, side, since);
 }
 
-async function queryFrameSidePage(config: SupabaseConfig, venue: Venue, side: TradeSide, since: string, limit: number, offset: number): Promise<StoredTrade[]> {
+async function queryTopFrameSide(config: SupabaseConfig, venue: Venue, side: TradeSide, since: string): Promise<StoredTrade[]> {
   const params = new URLSearchParams({
     select: "side,price,size,value_usd,trade_time",
     venue: `eq.${venue}`,
     side: `eq.${side}`,
     trade_time: `gte.${since}`,
-    order: "trade_time.desc",
-    limit: String(limit),
-    offset: String(offset),
+    order: "value_usd.desc",
+    limit: "50",
   });
   const response = await supabaseFetch(config, `${TRADE_TABLE}?${params}`);
   if (!response.ok) throw new Error(`Supabase ${venue} ${side} query failed: ${response.status}`);
   const rows = await response.json() as Record<string, unknown>[];
   return rows.map(parseStoredTrade).filter(isStoredTrade);
+}
+
+async function queryFrameSideTotal(config: SupabaseConfig, venue: Venue, side: TradeSide, since: string): Promise<number> {
+  const response = await supabaseFetch(config, "rpc/hype_dashboard_trade_side_total", {
+    body: JSON.stringify({ p_side: side, p_since: since, p_venue: venue }),
+    method: "POST",
+  });
+  if (!response.ok) throw new Error(`Supabase ${venue} ${side} total failed: ${response.status}`);
+  const value = await response.json() as unknown;
+  return toNumber(value) ?? 0;
 }
 
 async function upsertTrades(config: SupabaseConfig, rows: Record<string, unknown>[]): Promise<void> {
