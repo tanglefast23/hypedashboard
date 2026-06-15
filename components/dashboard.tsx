@@ -153,10 +153,14 @@ function CrowdingPanel({ data, onRange, range }: { data: DashboardData; onRange:
         <div className="grid grid-cols-2 gap-3">
           <CrowdingMini label="Combined OI" value={formatCompactUsd(crowding.totalOiUsd)} tone="text-slate-100" />
           <CrowdingMini label="Venues" value={String(crowding.sources.length)} tone="text-slate-100" />
-          <CrowdingMini label="Funding/OI" value={signedScore(crowding.breakdown.fundingOi)} tone={scoreToneForCrowding(crowding.breakdown.fundingOi)} />
-          <CrowdingMini label="Flow" value={signedScore(crowding.breakdown.flow)} tone={scoreToneForCrowding(crowding.breakdown.flow)} />
-          <CrowdingMini label="OI/Price" value={signedScore(crowding.breakdown.oiPrice)} tone={scoreToneForCrowding(crowding.breakdown.oiPrice)} />
-          <CrowdingMini label="TWAP" value={signedScore(crowding.breakdown.twap)} tone={scoreToneForCrowding(crowding.breakdown.twap)} />
+        </div>
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3">
+          <p className="mb-2 text-xs uppercase tracking-[0.18em] text-slate-500">Score weights</p>
+          <CrowdingWeightRow label="OI/Funding crowding" score={crowding.breakdown.fundingOi} weight="35%" />
+          <CrowdingWeightRow label="Liquidation imbalance" note="pending source" score={crowding.breakdown.liquidation} weight="25%" />
+          <CrowdingWeightRow label="Price/OI trap behavior" score={crowding.breakdown.oiPrice} weight="20%" />
+          <CrowdingWeightRow label="Taker-flow reversal" score={crowding.breakdown.flow} weight="15%" />
+          <CrowdingWeightRow label="TWAP pressure" score={crowding.breakdown.twap} weight="5%" />
         </div>
       </div>
       <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
@@ -169,6 +173,15 @@ function CrowdingPanel({ data, onRange, range }: { data: DashboardData; onRange:
 
 function CrowdingMini({ label, tone, value }: { label: string; tone: string; value: string }) {
   return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{label}</p><p className={`mono mt-1 text-lg font-semibold ${tone}`}>{value}</p></div>;
+}
+
+function CrowdingWeightRow({ label, note, score, weight }: { label: string; note?: string; score: number; weight: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-slate-800/80 py-2 first:border-t-0">
+      <div className="min-w-0"><p className="truncate text-xs text-slate-300"><span className="mono text-slate-500">{weight}</span> {label}</p>{note ? <p className="mt-0.5 text-[10px] text-slate-600">{note}</p> : null}</div>
+      <span className={`mono text-sm font-semibold ${scoreToneForCrowding(score)}`}>{signedScore(score)}</span>
+    </div>
+  );
 }
 
 function CrowdingBar({ bar, maxAbs }: { bar: DashboardData["crowding"]["bars"]["day"][number]; maxAbs: number }) {

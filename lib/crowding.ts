@@ -17,13 +17,14 @@ const PRICE_FALLBACK = 1;
 export async function getCrowdingData(input: { hypePrice: number; orderFlow: DashboardData["orderFlow"]; priceChange1d: number | null; twaps: DashboardData["twaps"] }): Promise<DashboardData["crowding"]> {
   const [venues, oiHistory] = await Promise.all([getVenueSnapshots(input.hypePrice), getOiHistory(input.hypePrice)]);
   const oiFundingScore = fundingCrowdingScore(venues);
+  const liquidationScore = 0;
   const oiPriceScore = oiPriceCrowdingScore(oiHistory, input.priceChange1d);
   const flowScore = flowCrowdingScore(input.orderFlow);
   const twapScore = twapCrowdingScore(input.twaps, input.hypePrice, input.orderFlow);
-  const score = clampScore(0.45 * oiFundingScore + 0.25 * oiPriceScore + 0.2 * flowScore + 0.1 * twapScore);
+  const score = clampScore(0.35 * oiFundingScore + 0.25 * liquidationScore + 0.2 * oiPriceScore + 0.15 * flowScore + 0.05 * twapScore);
   return {
     bars: buildCrowdingBars(oiHistory, score),
-    breakdown: { flow: Math.round(flowScore), fundingOi: Math.round(oiFundingScore), oiPrice: Math.round(oiPriceScore), twap: Math.round(twapScore) },
+    breakdown: { flow: Math.round(flowScore), fundingOi: Math.round(oiFundingScore), liquidation: Math.round(liquidationScore), oiPrice: Math.round(oiPriceScore), twap: Math.round(twapScore) },
     generatedAt: new Date().toISOString(),
     label: crowdingLabel(score),
     score: Math.round(score),

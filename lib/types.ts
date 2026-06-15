@@ -110,6 +110,7 @@ export type CrowdingData = {
   breakdown: {
     flow: number;
     fundingOi: number;
+    liquidation: number;
     oiPrice: number;
     twap: number;
   };
