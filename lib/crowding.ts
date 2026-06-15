@@ -270,7 +270,7 @@ function flowFrameScore(flow: { buys: { value: number }[]; sells: { value: numbe
 
 function twapCrowdingScore(twaps: DashboardData["twaps"], hypePrice: number, orderFlow: DashboardData["orderFlow"]): number {
   const oneHourVolume = orderFlow.hourlyVolume.at(-1)?.volumeUsd ?? hypePrice * PRICE_FALLBACK;
-  return clampScore((twaps.pressure.next1h / Math.max(oneHourVolume, 1)) * 100);
+  return clampScore((-twaps.pressure.next1h / Math.max(oneHourVolume, 1)) * 100);
 }
 
 function buildCrowdingBars(history: Record<CrowdingRange, OiPoint[]>, currentScore: number): DashboardData["crowding"]["bars"] {
