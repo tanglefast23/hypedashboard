@@ -356,10 +356,73 @@ function calculateRsi(candles: Candle[], currentPrice: number, period = 14): num
   return 100 - 100 / (1 + rs);
 }
 
+async function getAssetMarket(coin: string, priceCandles: Candle[], headerCandles: Candle[]): Promise<DashboardData["hype"]> {
+  const midsRaw = await postHyperliquid({ type: "allMids" });
+  const mids = z.record(z.string()).parse(midsRaw);
+  const price = toNumber(mids[coin]) ?? priceCandles.at(-1)?.close ?? 0;
+  return { price, headerChanges: getHeaderChanges(price, headerCandles), changes: getPriceChanges(price, priceCandles), volumes: getVolumes(priceCandles, price), marketCap: null, fdv: null, volume24h: null };
+}
+
+function emptyVenueFlow(): DashboardData["orderFlow"]["spot"] {
+  return {
+    marketTrades: Object.fromEntries(FLOW_TIMEFRAMES.map((frame) => [frame.id, { buys: [], sells: [] }])) as unknown as DashboardData["orderFlow"]["spot"]["marketTrades"],
+    limitFills: Object.fromEntries(FLOW_TIMEFRAMES.map((frame) => [frame.id, { buys: [], sells: [] }])) as unknown as DashboardData["orderFlow"]["spot"]["limitFills"],
+  };
+}
+
+async function getPerpOnlyOrderFlow(coin: string, price: number, candles: Candle[], monthlyCandles: Candle[]): Promise<DashboardData["orderFlow"]> {
+  const raw = await postHyperliquid({ type: "recentTrades", coin }).catch(() => []);
+  return { hourlyVolume: buildHourlyVolumeBars(candles, price), weeklyVolume: buildWeeklyVolumeBars(monthlyCandles), dailyVolume: buildDailyVolumeBars(monthlyCandles), perps: buildVenueFlow(z.array(z.unknown()).parse(raw)), spot: emptyVenueFlow() };
+}
+
+async function getGenericCrowdingData(coin: string, market: DashboardData["hype"], orderFlow: DashboardData["orderFlow"], twaps: DashboardData["twaps"], rsi14: number | null): Promise<DashboardData["crowding"]> {
+  const raw = await postHyperliquid({ type: "metaAndAssetCtxs" });
+  const [metaRaw, ctxsRaw] = z.tuple([z.record(z.unknown()), z.array(z.record(z.unknown()))]).parse(raw);
+  const meta = z.array(z.record(z.unknown())).parse(metaRaw.universe);
+  const index = meta.findIndex((row) => row.name === coin);
+  const ctx = ctxsRaw[index] ?? {};
+  const oiUsd = (toNumber(ctx.openInterest) ?? 0) * (toNumber(ctx.markPx) ?? market.price);
+  const funding = toNumber(ctx.funding);
+  const fundingScore = funding === null ? 0 : Math.max(-100, Math.min(100, funding * 1_000_000));
+  const flowNetUsd = weightedMarketNet(orderFlow);
+  const flowScore = Math.max(-100, Math.min(100, flowNetUsd / 10_000));
+  const twapScore = Math.max(-100, Math.min(100, (-twaps.pressure.next1h / Math.max(orderFlow.hourlyVolume.at(-1)?.volumeUsd ?? 1, 1)) * 100));
+  const score = Math.round(Math.max(-100, Math.min(100, 0.35 * fundingScore + 0.15 * flowScore + 0.05 * twapScore)));
+  return { bars: neutralCrowdingBars(oiUsd, score), breakdown: { flow: Math.round(flowScore), fundingOi: Math.round(fundingScore), liquidation: 0, oiPrice: 0, twap: Math.round(twapScore) }, generatedAt: new Date().toISOString(), label: score > 50 ? "Crowded Long" : score > 20 ? "Long-Leaning" : score < -50 ? "Crowded Short" : score < -20 ? "Short-Leaning" : "Balanced", metrics: { flowNetUsd, liquidationImbalanceUsd: null, oiChange24hPercent: null, priceChange24hPercent: market.changes["1d"], rsi14, rsiModifier: 1, twapPressure1hUsd: twaps.pressure.next1h, weightedFunding: funding }, score, sources: oiUsd ? [{ funding, name: "Hyperliquid", oiUsd, source: "official" }] : [], summary: "Perp positioning uses Hyperliquid-native funding, taker flow, TWAP pressure, and current OI for this market.", totalOiUsd: oiUsd };
+}
+
+function weightedMarketNet(orderFlow: DashboardData["orderFlow"]): number {
+  const frames = [{ id: "5m", weight: 0.5 }, { id: "15m", weight: 0.3 }, { id: "1h", weight: 0.2 }] as const;
+  return frames.reduce((sum, frame) => {
+    const flow = orderFlow.perps.marketTrades[frame.id];
+    return sum + frame.weight * (flow.buys.reduce((total, row) => total + row.value, 0) - flow.sells.reduce((total, row) => total + row.value, 0));
+  }, 0);
+}
+
+function neutralCrowdingBars(value: number, latestScore: number): DashboardData["crowding"]["bars"] {
+  const now = new Date();
+  const day = Array.from({ length: 24 }, (_, index) => ({ label: String((now.getUTCHours() - 23 + index + 24) % 24).padStart(2, "0"), score: index === 23 ? latestScore : 0, value }));
+  return { day, week: Array.from({ length: 7 }, (_, index) => ({ label: `D-${6 - index}`, score: index === 6 ? latestScore : 0, value })), month: Array.from({ length: 30 }, (_, index) => ({ label: String(index + 1), score: index === 29 ? latestScore : 0, value })) };
+}
+
 export async function getDashboardData(): Promise<DashboardData> {
-  const [candles, weeklyCandles, monthlyCandles] = await Promise.all([getHypeCandles24h(), getHypeCandles7d(), getHypeCandles30d()]);
-  const hype = await getHypeMarket(candles, weeklyCandles);
-  const [twaps, orderFlow, accountPerps] = await Promise.all([getHypeTwaps(hype.price), getOrderFlow(hype.price, candles, monthlyCandles), getAccountPerpWatch()]);
-  const crowding = await getCrowdingData({ hypePrice: hype.price, orderFlow, priceChange1d: hype.changes["1d"], rsi14: calculateRsi(weeklyCandles, hype.price), twaps });
-  return { generatedAt: new Date().toISOString(), hype, twaps, orderFlow, accountPerps, crowding };
+  return getAssetDashboardData("HYPE");
+}
+
+export async function getAssetDashboardData(symbol: string): Promise<DashboardData> {
+  const coin = normalizePerpCoin(symbol).replace(/^XYZ:/, "");
+  const [candles, weeklyCandles, monthlyCandles] = await Promise.all([
+    coin === "HYPE" ? getHypeCandles24h() : getPerpCandles(coin, "1m", 24 * 60 * 60 * 1000),
+    coin === "HYPE" ? getHypeCandles7d() : getPerpCandles(coin, "1h", 7 * 24 * 60 * 60 * 1000),
+    coin === "HYPE" ? getHypeCandles30d() : getPerpCandles(coin, "1d", 30 * 24 * 60 * 60 * 1000),
+  ]);
+  const hype = coin === "HYPE" ? await getHypeMarket(candles, weeklyCandles) : await getAssetMarket(coin, candles, weeklyCandles);
+  const [twaps, orderFlow, accountPerps] = await Promise.all([
+    coin === "HYPE" ? getHypeTwaps(hype.price) : getHoldingTwaps(coin, hype.price),
+    coin === "HYPE" ? getOrderFlow(hype.price, candles, monthlyCandles) : getPerpOnlyOrderFlow(coin, hype.price, candles, monthlyCandles),
+    getAccountPerpWatch(),
+  ]);
+  const rsi14 = calculateRsi(weeklyCandles, hype.price);
+  const crowding = coin === "HYPE" ? await getCrowdingData({ hypePrice: hype.price, orderFlow, priceChange1d: hype.changes["1d"], rsi14, twaps }) : await getGenericCrowdingData(coin, hype, orderFlow, twaps, rsi14);
+  return { generatedAt: new Date().toISOString(), asset: { symbol: coin, spotSymbol: coin === "HYPE" ? "@107" : null }, hype, twaps, orderFlow, accountPerps, crowding };
 }

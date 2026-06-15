@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
-import { getDashboardData } from "../../../lib/data";
+import { getAssetDashboardData } from "../../../lib/data";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const data = await getDashboardData();
+    const url = new URL(request.url);
+    const coin = url.searchParams.get("coin") ?? "HYPE";
+    const data = await getAssetDashboardData(coin);
     return NextResponse.json(data, {
       headers: {
         "Cache-Control": "s-maxage=30, stale-while-revalidate=90",

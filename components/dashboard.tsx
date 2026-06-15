@@ -25,36 +25,36 @@ export function Dashboard({ initialData }: Props) {
   const [crowdingRange, setCrowdingRange] = useState<VolumeRange>("day");
 
   useEffect(() => {
-    const timer = window.setInterval(() => { void refresh(setStatus); }, 30_000);
+    const timer = window.setInterval(() => { void refresh(initialData.asset.symbol, setStatus); }, 30_000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [initialData.asset.symbol]);
 
   const data = status.data ?? initialData;
   const handleFlowFrame = (frame: FlowTimeframeId) => {
     setFlowFrame(frame);
-    void refresh(setStatus);
+    void refresh(data.asset.symbol, setStatus);
   };
 
   return (
     <main className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-5 md:px-8 md:py-8">
-      <Header data={data} loading={status.loading} onRefresh={() => void refresh(setStatus)} />
+      <Header data={data} loading={status.loading} onRefresh={() => void refresh(data.asset.symbol, setStatus)} />
       {status.error ? <ErrorBanner message={status.error} /> : null}
       <PerformanceGrid data={data} />
       <CrowdingPanel data={data} range={crowdingRange} onRange={setCrowdingRange} />
       <HypeTwapPanel data={data} />
       <VolumeBarChart data={data} range={volumeRange} onRange={setVolumeRange} />
       <section className="grid gap-6 xl:grid-cols-2">
-        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Perps Market Buys / Sells" buys={data.orderFlow.perps.marketTrades[flowFrame].buys} sells={data.orderFlow.perps.marketTrades[flowFrame].sells} subtitle="Completed aggressive taker trades on HYPE perps." />
-        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Spot Market Buys / Sells" buys={data.orderFlow.spot.marketTrades[flowFrame].buys} sells={data.orderFlow.spot.marketTrades[flowFrame].sells} subtitle="Completed aggressive taker trades on HYPE/USDC spot." />
+        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Perps Market Buys / Sells" buys={data.orderFlow.perps.marketTrades[flowFrame].buys} sells={data.orderFlow.perps.marketTrades[flowFrame].sells} subtitle={`Completed aggressive taker trades on ${data.asset.symbol} perps.`} />
+        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Spot Market Buys / Sells" buys={data.orderFlow.spot.marketTrades[flowFrame].buys} sells={data.orderFlow.spot.marketTrades[flowFrame].sells} subtitle={data.asset.spotSymbol ? `Completed aggressive taker trades on ${data.asset.symbol}/USDC spot.` : `${data.asset.symbol} spot tape is not available from the current Hyperliquid source.`} />
       </section>
     </main>
   );
 }
 
-async function refresh(setStatus: React.Dispatch<React.SetStateAction<Status>>) {
+async function refresh(symbol: string, setStatus: React.Dispatch<React.SetStateAction<Status>>) {
   setStatus((current) => ({ ...current, loading: true, error: null }));
   try {
-    const response = await fetch(`/api/dashboard?t=${Date.now()}`, { cache: "no-store" });
+    const response = await fetch(`/api/dashboard?coin=${encodeURIComponent(symbol)}&t=${Date.now()}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`Dashboard refresh failed: ${response.status}`);
     const data = await response.json() as DashboardData;
     setStatus({ data, error: null, loading: false });
@@ -68,7 +68,7 @@ function Header({ data, loading, onRefresh }: { data: DashboardData; loading: bo
   const [open, setOpen] = useState(false);
   return (
     <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-      <div className="flex flex-col gap-2 md:flex-row md:items-end md:gap-4"><h1 className="text-4xl font-semibold tracking-tight md:text-6xl">HYPE</h1><div className="flex flex-wrap items-baseline gap-x-3 gap-y-2"><p className="mono text-3xl font-semibold text-emerald-300 md:text-5xl">{formatUsd(data.hype.price, 4)}</p><HeaderChangePills changes={data.hype.headerChanges} /></div></div>
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:gap-4"><h1 className="text-4xl font-semibold tracking-tight md:text-6xl">{data.asset.symbol}</h1><div className="flex flex-wrap items-baseline gap-x-3 gap-y-2"><p className="mono text-3xl font-semibold text-emerald-300 md:text-5xl">{formatUsd(data.hype.price, 4)}</p><HeaderChangePills changes={data.hype.headerChanges} /></div></div>
       <div className="relative flex gap-2 self-start md:self-auto">
         <button aria-label="Show watched holdings" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-700/80 bg-slate-900/60 text-slate-200 hover:bg-slate-800" onClick={() => setOpen((value) => !value)}>
           <List className="h-4 w-4" />
@@ -86,10 +86,16 @@ function HoldingsMenu({ data }: { data: DashboardData }) {
   const holdings = data.accountPerps.groups.filter((group) => group.position.displayCoin !== "HYPE");
   return (
     <div className="absolute right-0 top-12 z-20 w-80 rounded-2xl border border-slate-700 bg-slate-950/95 p-3 shadow-2xl shadow-black/50 backdrop-blur">
-      <div className="mb-2 flex items-center justify-between"><p className="text-sm font-semibold">Watched holdings</p><span className="mono text-xs text-slate-500">{holdings.length}</span></div>
+      <div className="mb-2 flex items-center justify-between"><p className="text-sm font-semibold">Watched holdings</p><span className="mono text-xs text-slate-500">{holdings.length + 2}</span></div>
       <div className="space-y-2">
         <Link className="block rounded-xl border border-emerald-400/30 bg-emerald-300/10 p-3 hover:border-emerald-300/70" href="/">
           <div className="flex items-center justify-between gap-3"><span className="font-semibold text-emerald-200">HOME</span><span className="mono text-xs text-emerald-300">HYPE</span></div>
+        </Link>
+        <Link className="block rounded-xl border border-slate-800 bg-slate-900/60 p-3 hover:border-emerald-400/50" href="/crypto/NEAR">
+          <div className="flex items-center justify-between gap-3"><span className="font-semibold">NEAR</span><span className="mono text-xs text-emerald-300">CRYPTO</span></div>
+        </Link>
+        <Link className="block rounded-xl border border-slate-800 bg-slate-900/60 p-3 hover:border-emerald-400/50" href="/crypto/ZEC">
+          <div className="flex items-center justify-between gap-3"><span className="font-semibold">ZEC</span><span className="mono text-xs text-emerald-300">CRYPTO</span></div>
         </Link>
         {holdings.length ? holdings.map((group) => (
           <Link className="block rounded-xl border border-slate-800 bg-slate-900/60 p-3 hover:border-emerald-400/50" href={`/holdings/${encodeURIComponent(group.coin)}`} key={group.coin}>
@@ -143,7 +149,7 @@ function CrowdingPanel({ data, onRange, range }: { data: DashboardData; onRange:
     <section className="grid gap-5 rounded-3xl border border-slate-700/50 bg-slate-950/60 p-5 shadow-2xl shadow-black/20 backdrop-blur lg:grid-cols-[minmax(240px,0.34fr)_minmax(0,0.66fr)]">
       <div className="flex flex-col justify-between gap-5">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">HYPE Perp Crowding</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{data.asset.symbol} Perp Crowding</p>
           <div className="mt-3 flex items-end gap-3"><p className={`mono text-5xl font-semibold ${scoreTone}`}>{signedScore(crowding.score)}</p><p className="pb-2 text-lg font-semibold text-slate-100">{crowding.label}</p></div>
           <p className="mt-2 text-sm text-slate-400">{risk}</p>
           <p className="mt-3 text-sm leading-6 text-slate-300">{crowding.summary}</p>
@@ -239,7 +245,7 @@ function VolumeBarChart({ data, onRange, range }: { data: DashboardData; onRange
   const subtitle = getVolumeSubtitle(range);
   return (
     <section className="rounded-3xl border border-slate-700/50 bg-slate-950/60 p-5 shadow-2xl shadow-black/20 backdrop-blur">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-semibold">HYPE Volume</h2><p className="mt-1 text-sm text-slate-400">{subtitle}</p></div><VolumeRangePills active={range} onRange={onRange} /></div>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-semibold">{data.asset.symbol} Volume</h2><p className="mt-1 text-sm text-slate-400">{subtitle}</p></div><VolumeRangePills active={range} onRange={onRange} /></div>
       <div className="flex h-52 items-end gap-1 sm:gap-2">{projectedBars.map(({ bar, projection }, index) => <div className="group flex h-full min-w-0 flex-1 flex-col justify-end gap-2" key={`${bar.label}-${index}`}><div className="flex min-h-0 flex-1 items-end"><VolumeStack bar={bar.volumeUsd} max={max} projection={projection} label={bar.label} /></div><span className="mono hidden text-center text-[10px] text-slate-500 sm:block">{bar.label}</span></div>)}</div>
     </section>
   );
@@ -364,10 +370,10 @@ function HypeTwapPanel({ data }: { data: DashboardData }) {
   const [filter, setFilter] = useState<TwapFilter>("combined");
   const now = useSecondTicker();
   const snapshotTime = Date.parse(data.generatedAt);
-  const rows = filterTwapRows(data.twaps.rows, filter).map((twap) => liveTwap(twap, now, snapshotTime));
+  const rows = filterTwapRows(data.twaps.rows, filter, data.asset.symbol).map((twap) => liveTwap(twap, now, snapshotTime));
   const pressure = buildFilteredTwapPressure(rows);
   return (
-    <Card title="TWAPs HYPE Buy Pressure" action={<TwapFilterPills active={filter} onFilter={setFilter} />}>
+    <Card title={`TWAPs ${data.asset.symbol} Buy Pressure`} action={<TwapFilterPills active={filter} onFilter={setFilter} showSpot={data.asset.spotSymbol !== null} />}>
       <div className="grid gap-5 lg:grid-cols-[minmax(220px,0.32fr)_minmax(0,0.68fr)]">
         <section className="rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
           <div className="grid grid-cols-2 gap-3">
@@ -388,7 +394,8 @@ function HypeTwapPanel({ data }: { data: DashboardData }) {
   );
 }
 
-function TwapFilterPills({ active, onFilter }: { active: TwapFilter; onFilter: (filter: TwapFilter) => void }) {
+function TwapFilterPills({ active, onFilter, showSpot }: { active: TwapFilter; onFilter: (filter: TwapFilter) => void; showSpot: boolean }) {
+  if (!showSpot) return <div className="flex flex-wrap gap-2"><button className={pillClass(active !== "spot")} onClick={() => onFilter("combined")}>PERPS</button></div>;
   return <div className="flex flex-wrap gap-2"><button className={pillClass(active === "spot")} onClick={() => onFilter("spot")}>SPOT</button><button className={pillClass(active === "perps")} onClick={() => onFilter("perps")}>PERPS</button><button className={pillClass(active === "combined")} onClick={() => onFilter("combined")}>S+P</button></div>;
 }
 
@@ -411,10 +418,10 @@ function liveTwap(twap: HypeTwap, now: number, snapshotTime: number): LiveTwap {
   return { ...twap, liveProgress, liveRemainingMs, liveValue: twap.value, snapshotElapsedMs };
 }
 
-function filterTwapRows(rows: HypeTwap[], filter: TwapFilter): HypeTwap[] {
+function filterTwapRows(rows: HypeTwap[], filter: TwapFilter, symbol: string): HypeTwap[] {
   if (filter === "combined") return rows;
-  const token = filter === "spot" ? "HYPE" : "HYPE-USD";
-  return rows.filter((row) => row.token === token);
+  if (filter === "spot") return rows.filter((row) => row.token === symbol);
+  return rows.filter((row) => row.token === `${symbol}-USD` || (symbol !== "HYPE" && row.token === symbol));
 }
 
 function buildFilteredTwapPressure(rows: LiveTwap[]) {
@@ -441,7 +448,7 @@ function Card({ title, action, children }: { title: string; action?: React.React
 function TwapRow({ twap }: { twap: LiveTwap }) {
   const sideTone = twap.side === "BUY" ? "text-emerald-300" : "text-rose-300";
   const progressTone = twap.side === "BUY" ? "bg-emerald-300" : "bg-rose-300";
-  return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><div className="mb-2 flex items-start justify-between gap-3"><div><span className={`mono text-xs font-semibold ${sideTone}`}>{twap.side}</span><p className="mono mt-1 text-sm text-slate-200">{twap.token}</p></div><div className="text-right"><p className="mono text-sm font-semibold transition-colors duration-300">{formatCompactUsd(twap.liveValue)}</p><p className="mono text-xs text-slate-500">{formatNumber(twap.amount)} HYPE</p></div></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-800"><div className={`h-full rounded-full transition-all duration-1000 ease-linear ${progressTone}`} style={{ width: `${Math.round(twap.liveProgress * 100)}%` }} /></div><div className="mt-2 flex justify-between gap-3 text-xs text-slate-500"><span className="mono">{shortAddress(twap.user)}</span><span>{formatDuration(twap.liveRemainingMs)} left</span></div></div>;
+  return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><div className="mb-2 flex items-start justify-between gap-3"><div><span className={`mono text-xs font-semibold ${sideTone}`}>{twap.side}</span><p className="mono mt-1 text-sm text-slate-200">{twap.token}</p></div><div className="text-right"><p className="mono text-sm font-semibold transition-colors duration-300">{formatCompactUsd(twap.liveValue)}</p><p className="mono text-xs text-slate-500">{formatNumber(twap.amount)} {displayTwapUnit(twap.token)}</p></div></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-800"><div className={`h-full rounded-full transition-all duration-1000 ease-linear ${progressTone}`} style={{ width: `${Math.round(twap.liveProgress * 100)}%` }} /></div><div className="mt-2 flex justify-between gap-3 text-xs text-slate-500"><span className="mono">{shortAddress(twap.user)}</span><span>{formatDuration(twap.liveRemainingMs)} left</span></div></div>;
 }
 
 function TwapStat({ label, tone, value }: { label: string; tone: string; value: string }) {
@@ -453,6 +460,7 @@ function largestTradeValue(rows: MarketTrade[]): number { return rows.reduce((ma
 function signedUsd(value: number): string { return `${value >= 0 ? "+" : "-"}${formatCompactUsd(Math.abs(value))}`; }
 function clamp(value: number, min: number, max: number): number { return Math.min(max, Math.max(min, value)); }
 function shortAddress(address: string): string { return address.length > 18 ? `${address.slice(0, 8)}...${address.slice(-6)}` : address; }
+function displayTwapUnit(token: string): string { return token.replace(/-USD$/, ""); }
 function formatDuration(ms: number): string {
   const totalSeconds = Math.max(0, Math.round(ms / 1_000));
   const hours = Math.floor(totalSeconds / 3_600);

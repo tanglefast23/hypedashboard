@@ -139,6 +139,7 @@ export type CrowdingData = {
 
 export type DashboardData = {
   generatedAt: string;
+  asset: { symbol: string; spotSymbol: string | null };
   hype: HypeMarket;
   twaps: HypeTwapData;
   orderFlow: OrderFlowData;
