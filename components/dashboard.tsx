@@ -46,8 +46,6 @@ export function Dashboard({ initialData }: Props) {
       <section className="grid gap-6 xl:grid-cols-2">
         <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Perps Market Buys / Sells" buys={data.orderFlow.perps.marketTrades[flowFrame].buys} sells={data.orderFlow.perps.marketTrades[flowFrame].sells} subtitle="Completed aggressive taker trades on HYPE perps." />
         <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Spot Market Buys / Sells" buys={data.orderFlow.spot.marketTrades[flowFrame].buys} sells={data.orderFlow.spot.marketTrades[flowFrame].sells} subtitle="Completed aggressive taker trades on HYPE/USDC spot." />
-        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Perps Filled Limit Buys / Sells" buys={data.orderFlow.perps.limitFills[flowFrame].buys} sells={data.orderFlow.perps.limitFills[flowFrame].sells} subtitle="Completed maker-side limit fills inferred from the HYPE perps tape." />
-        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Spot Filled Limit Buys / Sells" buys={data.orderFlow.spot.limitFills[flowFrame].buys} sells={data.orderFlow.spot.limitFills[flowFrame].sells} subtitle="Completed maker-side limit fills inferred from the HYPE/USDC spot tape." />
       </section>
     </main>
   );
@@ -286,19 +284,29 @@ function VolumeRangePills({ active, onRange }: { active: VolumeRange; onRange: (
 
 function OrderFlowCard({ buys, frame, onFrame, sells, subtitle, title }: { buys: MarketTrade[]; frame: FlowTimeframeId; onFrame: (frame: FlowTimeframeId) => void; sells: MarketTrade[]; subtitle: string; title: string }) {
   const netValue = sumTradeValue(buys) - sumTradeValue(sells);
+  const largestBuy = largestTradeValue(buys);
+  const largestSell = largestTradeValue(sells);
   return (
     <section className="rounded-3xl border border-slate-700/50 bg-slate-950/60 p-5 shadow-2xl shadow-black/20 backdrop-blur">
-      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
+      <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
           <h2 className="text-xl font-semibold">{title}</h2>
           <p className="mt-1 text-sm text-slate-400">{subtitle}</p>
-          <p className="mono mt-2 text-sm text-slate-500">Net <span className={`font-semibold ${valueTone(netValue)}`}>{signedUsd(netValue)}</span></p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <FlowStat label="Net" value={signedUsd(netValue)} tone={valueTone(netValue)} />
+            <FlowStat label="Largest Buy" value={formatCompactUsd(largestBuy)} tone="text-emerald-300" />
+            <FlowStat label="Largest Sell" value={formatCompactUsd(largestSell)} tone="text-rose-300" />
+          </div>
         </div>
         <Pills active={frame} onFrame={onFrame} />
       </div>
       <div className="grid gap-4 md:grid-cols-2"><FlowTable rows={buys} side="BUY" /><FlowTable rows={sells} side="SELL" /></div>
     </section>
   );
+}
+
+function FlowStat({ label, tone, value }: { label: string; tone: string; value: string }) {
+  return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{label}</p><p className={`mono mt-1 text-2xl font-semibold ${tone}`}>{value}</p></div>;
 }
 
 function Pills({ active, onFrame }: { active: FlowTimeframeId; onFrame: (frame: FlowTimeframeId) => void }) {
@@ -441,6 +449,7 @@ function TwapStat({ label, tone, value }: { label: string; tone: string; value: 
 }
 
 function sumTradeValue(rows: MarketTrade[]): number { return rows.reduce((sum, row) => sum + row.value, 0); }
+function largestTradeValue(rows: MarketTrade[]): number { return rows.reduce((max, row) => Math.max(max, row.value), 0); }
 function signedUsd(value: number): string { return `${value >= 0 ? "+" : "-"}${formatCompactUsd(Math.abs(value))}`; }
 function clamp(value: number, min: number, max: number): number { return Math.min(max, Math.max(min, value)); }
 function shortAddress(address: string): string { return address.length > 18 ? `${address.slice(0, 8)}...${address.slice(-6)}` : address; }
