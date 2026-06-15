@@ -77,13 +77,12 @@ function buildRangeBars(rows: SnapshotRow[], range: RangeId): CrowdingBar[] {
       const time = Date.parse(row.snapshot_time);
       return time >= bucketStart && time < bucketStart + spec.durationMs;
     });
-    if (!bucketRows.length) return null;
     return {
       label: formatBarLabel(bucketStart, spec.label),
-      score: Math.round(avg(bucketRows.map((row) => row.score))),
-      value: avg(bucketRows.map((row) => row.total_oi_usd)),
+      score: bucketRows.length ? Math.round(avg(bucketRows.map((row) => row.score))) : 0,
+      value: bucketRows.length ? avg(bucketRows.map((row) => row.total_oi_usd)) : 0,
     };
-  }).filter(isCrowdingBar);
+  });
 }
 
 function minBarsForRange(range: RangeId): number { return range === "day" ? 2 : 2; }
@@ -121,4 +120,3 @@ function formatBarLabel(time: number, mode: "hour" | "day"): string {
   return mode === "hour" ? String(date.getHours()).padStart(2, "0") : `${date.getMonth() + 1}/${date.getDate()}`;
 }
 function isSnapshotRow(row: SnapshotRow | null): row is SnapshotRow { return row !== null; }
-function isCrowdingBar(bar: CrowdingBar | null): bar is CrowdingBar { return bar !== null; }
