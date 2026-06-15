@@ -32,7 +32,7 @@ export async function getCurrentCrowdingData(input: { hypePrice: number; orderFl
   const liquidationScore = liquidation?.score ?? 0;
   const oiChange24hPercent = oiChangePercent(oiHistory.day);
   const flowNetUsd = weightedFlowNetUsd(input.orderFlow);
-  const oiPriceScore = oiPriceCrowdingScore(oiHistory, input.priceChange1d);
+  const oiPriceScore = oiPriceCrowdingScore(oiHistory, input.priceChange1d, weightedFunding(venues));
   const flowScore = flowCrowdingScore(input.orderFlow);
   const twapScore = twapCrowdingScore(input.twaps, input.hypePrice, input.orderFlow);
   const score = clampScore(0.35 * oiFundingScore + 0.25 * liquidationScore + 0.2 * oiPriceScore + 0.15 * flowScore + 0.05 * twapScore);
@@ -216,14 +216,21 @@ function flowNetUsd(flow: { buys: { value: number }[]; sells: { value: number }[
   return buy - sell;
 }
 
-function oiPriceCrowdingScore(history: Record<CrowdingRange, OiPoint[]>, priceChange1d: number | null): number {
+function oiPriceCrowdingScore(history: Record<CrowdingRange, OiPoint[]>, priceChange1d: number | null, funding: number | null): number {
   const bars = history.day;
   if (bars.length < 2 || priceChange1d === null) return 0;
   const first = bars[0].value;
   const last = bars.at(-1)?.value ?? first;
   const oiChange = first ? (last - first) / first : 0;
-  const priceDirection = priceChange1d >= 0 ? 1 : -1;
-  return clampScore(oiChange * priceDirection * 700);
+  if (oiChange <= 0) return 0;
+  const fundingDirection = funding !== null && Math.abs(funding) >= 0.00002 ? Math.sign(funding) : 0;
+  const direction = fundingDirection || (priceChange1d >= 0 ? 1 : -1);
+  const base = clampScore(oiChange * 350);
+  const isTrendContinuation = priceChange1d * direction > 5;
+  const isFlat = Math.abs(priceChange1d) < 2;
+  const trapMultiplier = isFlat || priceChange1d * direction < 0 ? 1 : 0.55;
+  const trendCap = isTrendContinuation ? 60 : 100;
+  return clampScore(direction * Math.min(base * trapMultiplier, trendCap));
 }
 
 function flowCrowdingScore(orderFlow: DashboardData["orderFlow"]): number {
