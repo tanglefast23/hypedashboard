@@ -43,7 +43,7 @@ export function Dashboard({ initialData }: Props) {
       <CrowdingPanel data={data} range={crowdingRange} onRange={setCrowdingRange} />
       <HypeTwapPanel data={data} />
       <VolumeBarChart data={data} range={volumeRange} onRange={setVolumeRange} />
-      <section className="grid gap-6 xl:grid-cols-2">
+      <section className="grid gap-8 2xl:grid-cols-2">
         <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Perps Market Buys / Sells" buys={data.orderFlow.perps.marketTrades[flowFrame].buys} sells={data.orderFlow.perps.marketTrades[flowFrame].sells} subtitle={`Completed aggressive taker trades on ${data.asset.symbol} perps.`} />
         <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Spot Market Buys / Sells" buys={data.orderFlow.spot.marketTrades[flowFrame].buys} sells={data.orderFlow.spot.marketTrades[flowFrame].sells} subtitle={data.asset.spotSymbol ? `Completed aggressive taker trades on ${data.asset.symbol}/USDC spot.` : `${data.asset.symbol} spot tape is not available from the current Hyperliquid source.`} />
       </section>
@@ -293,12 +293,12 @@ function OrderFlowCard({ buys, frame, onFrame, sells, subtitle, title }: { buys:
   const largestBuy = largestTradeValue(buys);
   const largestSell = largestTradeValue(sells);
   return (
-    <section className="rounded-3xl border border-slate-700/50 bg-slate-950/60 p-5 shadow-2xl shadow-black/20 backdrop-blur">
-      <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <section className="rounded-3xl border border-slate-700/50 bg-slate-950/60 p-6 shadow-2xl shadow-black/20 backdrop-blur">
+      <div className="mb-5 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
           <h2 className="text-xl font-semibold">{title}</h2>
           <p className="mt-1 text-sm text-slate-400">{subtitle}</p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
             <FlowStat label="Net" value={signedUsd(netValue)} tone={valueTone(netValue)} />
             <FlowStat label="Largest Buy" value={formatCompactUsd(largestBuy)} tone="text-emerald-300" />
             <FlowStat label="Largest Sell" value={formatCompactUsd(largestSell)} tone="text-rose-300" />
@@ -306,7 +306,7 @@ function OrderFlowCard({ buys, frame, onFrame, sells, subtitle, title }: { buys:
         </div>
         <Pills active={frame} onFrame={onFrame} />
       </div>
-      <div className="grid gap-4 md:grid-cols-2"><FlowTable rows={buys} side="BUY" /><FlowTable rows={sells} side="SELL" /></div>
+      <div className="grid gap-6 md:grid-cols-2"><FlowTable rows={buys} side="BUY" /><FlowTable rows={sells} side="SELL" /></div>
     </section>
   );
 }
@@ -327,9 +327,9 @@ function pillClass(active: boolean): string {
 function FlowTable({ rows, side }: { rows: MarketTrade[]; side: "BUY" | "SELL" }) {
   const [sort, setSort] = useState<SortState>(null);
   const sortedRows = sortRows(rows, sort);
-  const tableScrollClass = rows.length > 10 ? "max-h-[22rem] overflow-y-auto" : "overflow-hidden";
+  const tableScrollClass = rows.length > 10 ? "max-h-[22rem] overflow-auto" : "overflow-x-auto";
   return (
-    <div><div className={`mb-2 mono text-sm font-semibold ${side === "BUY" ? "text-emerald-300" : "text-rose-300"}`}>{side}</div><div className={`${tableScrollClass} rounded-2xl border border-slate-800`}><table className="w-full text-left text-xs"><thead className="sticky top-0 z-10 bg-slate-900/95 text-slate-500"><tr><SortableHead label="Date" sortKey="date" sort={sort} onSort={setSort} padded /><SortableHead label="Price" sortKey="price" sort={sort} onSort={setSort} /><SortableHead label="Size" sortKey="size" sort={sort} onSort={setSort} /><SortableHead label="Value" sortKey="value" sort={sort} onSort={setSort} /></tr></thead><tbody>{sortedRows.map((row, index) => <tr className="border-t border-slate-800/80" key={`${side}-${rowKey(row)}-${index}`}><td className="mono px-3 py-2 text-slate-400">{formatElapsed(row.time)}</td><td className="mono">{formatUsd(row.price, 4)}</td><td className="mono">{formatNumber(row.size)}</td><td className="mono">{formatCompactUsd(row.value)}</td></tr>)}</tbody></table></div></div>
+    <div><div className={`mb-2 mono text-sm font-semibold ${side === "BUY" ? "text-emerald-300" : "text-rose-300"}`}>{side}</div><div className={`${tableScrollClass} rounded-2xl border border-slate-800`}><table className="min-w-[28rem] w-full text-left text-xs"><thead className="sticky top-0 z-10 bg-slate-900/95 text-slate-500"><tr><SortableHead label="Date" sortKey="date" sort={sort} onSort={setSort} padded /><SortableHead label="Price" sortKey="price" sort={sort} onSort={setSort} /><SortableHead label="Size" sortKey="size" sort={sort} onSort={setSort} /><SortableHead label="Value" sortKey="value" sort={sort} onSort={setSort} /></tr></thead><tbody>{sortedRows.map((row, index) => <tr className="border-t border-slate-800/80" key={`${side}-${rowKey(row)}-${index}`}><td className="mono px-3 py-2 text-slate-400">{formatElapsed(row.time)}</td><td className="mono px-3 py-2">{formatUsd(row.price, 4)}</td><td className="mono px-3 py-2">{formatNumber(row.size)}</td><td className="mono px-3 py-2">{formatCompactUsd(row.value)}</td></tr>)}</tbody></table></div></div>
   );
 }
 
