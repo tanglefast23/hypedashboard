@@ -399,18 +399,20 @@ async function getGenericCrowdingData(coin: string, market: DashboardData["hype"
   const ctx = ctxsRaw[index] ?? {};
   const oiUsd = (toNumber(ctx.openInterest) ?? 0) * (toNumber(ctx.markPx) ?? market.price);
   const funding = toNumber(ctx.funding);
-  const [liquidation, coinalyzeOiChange] = await Promise.all([
+  const [liquidation, coinalyzeOiChange, cexOiChange] = await Promise.all([
     getCoinalyzeLiquidationImbalance(coin).catch(() => null),
     getCoinalyzeOiChangePercent(coin).catch(() => null),
+    getCexOiChangePercent(coin).catch(() => null),
   ]);
+  const oiChange24hPercent = coinalyzeOiChange ?? cexOiChange;
   const fundingScore = funding === null ? 0 : Math.max(-100, Math.min(100, funding * 1_000_000));
   const flowNetUsd = weightedMarketNet(orderFlow);
   const flowScore = Math.max(-100, Math.min(100, flowNetUsd / 10_000));
   const twapScore = Math.max(-100, Math.min(100, (-twaps.pressure.next1h / Math.max(orderFlow.hourlyVolume.at(-1)?.volumeUsd ?? 1, 1)) * 100));
-  const oiPriceScore = genericOiPriceCrowdingScore(coinalyzeOiChange, market.changes["1d"], funding);
+  const oiPriceScore = genericOiPriceCrowdingScore(oiChange24hPercent, market.changes["1d"], funding);
   const liquidationScore = liquidation?.score ?? 0;
   const score = Math.round(Math.max(-100, Math.min(100, 0.35 * fundingScore + 0.25 * liquidationScore + 0.2 * oiPriceScore + 0.15 * flowScore + 0.05 * twapScore)));
-  return { bars: neutralCrowdingBars(oiUsd, score), breakdown: { flow: Math.round(flowScore), fundingOi: Math.round(fundingScore), liquidation: Math.round(liquidationScore), oiPrice: Math.round(oiPriceScore), twap: Math.round(twapScore) }, generatedAt: new Date().toISOString(), label: score > 50 ? "Crowded Long" : score > 20 ? "Long-Leaning" : score < -50 ? "Crowded Short" : score < -20 ? "Short-Leaning" : "Balanced", metrics: { flowNetUsd, liquidationImbalanceUsd: liquidation?.imbalanceUsd ?? null, oiChange24hPercent: coinalyzeOiChange, priceChange24hPercent: market.changes["1d"], rsi14, rsiModifier: 1, twapPressure1hUsd: twaps.pressure.next1h, weightedFunding: funding }, score, sources: oiUsd ? [{ funding, name: "Hyperliquid", oiUsd, source: "official" }] : [], summary: "Perp positioning uses Hyperliquid-native funding, taker flow, TWAP pressure, and current OI for this market.", totalOiUsd: oiUsd };
+  return { bars: neutralCrowdingBars(oiUsd, score), breakdown: { flow: Math.round(flowScore), fundingOi: Math.round(fundingScore), liquidation: Math.round(liquidationScore), oiPrice: Math.round(oiPriceScore), twap: Math.round(twapScore) }, generatedAt: new Date().toISOString(), label: score > 50 ? "Crowded Long" : score > 20 ? "Long-Leaning" : score < -50 ? "Crowded Short" : score < -20 ? "Short-Leaning" : "Balanced", metrics: { flowNetUsd, liquidationImbalanceUsd: liquidation?.imbalanceUsd ?? null, oiChange24hPercent, priceChange24hPercent: market.changes["1d"], rsi14, rsiModifier: 1, twapPressure1hUsd: twaps.pressure.next1h, weightedFunding: funding }, score, sources: oiUsd ? [{ funding, name: "Hyperliquid", oiUsd, source: "official" }] : [], summary: "Perp positioning uses Hyperliquid-native funding, taker flow, TWAP pressure, and current OI for this market.", totalOiUsd: oiUsd };
 }
 
 function genericOiPriceCrowdingScore(oiChange24hPercent: number | null, priceChange1d: number | null, funding: number | null): number {
@@ -420,6 +422,35 @@ function genericOiPriceCrowdingScore(oiChange24hPercent: number | null, priceCha
   const base = Math.max(-100, Math.min(100, (oiChange24hPercent / 100) * 350));
   const trapMultiplier = Math.abs(priceChange1d) < 2 || priceChange1d * direction < 0 ? 1 : 0.55;
   return direction * base * trapMultiplier;
+}
+
+async function getCexOiChangePercent(coin: string): Promise<number | null> {
+  const symbol = `${coin}USDT`;
+  const [binance, bybit] = await Promise.allSettled([getBinanceOiChangePercent(symbol), getBybitOiChangePercent(symbol)]);
+  const rows = [binance, bybit].flatMap((result, index) => result.status === "fulfilled" && result.value !== null ? [{ value: result.value, weight: index === 0 ? 1.2 : 1 }] : []);
+  const totalWeight = rows.reduce((sum, row) => sum + row.weight, 0);
+  return totalWeight ? rows.reduce((sum, row) => sum + row.value * row.weight, 0) / totalWeight : null;
+}
+
+async function getBinanceOiChangePercent(symbol: string): Promise<number | null> {
+  const params = new URLSearchParams({ limit: "24", period: "1h", symbol });
+  const raw = await getJson(`https://fapi.binance.com/futures/data/openInterestHist?${params.toString()}`);
+  const rows = z.array(z.record(z.unknown())).parse(raw);
+  return changeFromRows(rows, "sumOpenInterestValue");
+}
+
+async function getBybitOiChangePercent(symbol: string): Promise<number | null> {
+  const params = new URLSearchParams({ category: "linear", intervalTime: "1h", limit: "24", symbol });
+  const raw = z.object({ result: z.object({ list: z.array(z.record(z.unknown())) }) }).parse(await getJson(`https://api.bybit.com/v5/market/open-interest?${params.toString()}`));
+  return changeFromRows(raw.result.list.toReversed(), "openInterest");
+}
+
+function changeFromRows(rows: Record<string, unknown>[], key: string): number | null {
+  const values = rows.map((row) => toNumber(row[key])).filter(isNumber);
+  const first = values[0];
+  const last = values.at(-1);
+  if (first === undefined || last === undefined || first <= 0 || last <= 0) return null;
+  return ((last - first) / first) * 100;
 }
 
 function weightedMarketNet(orderFlow: DashboardData["orderFlow"]): number {
