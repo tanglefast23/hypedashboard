@@ -137,7 +137,7 @@ async function getHypeTwaps(hypePrice: number): Promise<DashboardData["twaps"]> 
     const [rawRows, hypeMarketIds] = await Promise.all([getJson(HYPURRSCAN_TWAPS_URL), getHypeMarketIds()]);
     const now = Date.now();
     const rows = normalizeTwapRows(z.array(z.unknown()).parse(rawRows), { hypeMarketIds, hypePrice, now });
-    return { pressure: buildTwapPressure(rows, now), rows: rows.slice(0, 15) };
+    return { pressure: buildTwapPressure(rows, now), rows };
   });
 }
 
