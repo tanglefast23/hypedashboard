@@ -117,6 +117,14 @@ export type CrowdingData = {
   generatedAt: string;
   label: "Crowded Long" | "Long-Leaning" | "Balanced" | "Short-Leaning" | "Crowded Short";
   score: number;
+  metrics: {
+    flowNetUsd: number;
+    liquidationImbalanceUsd: number | null;
+    oiChange24hPercent: number | null;
+    priceChange24hPercent: number | null;
+    twapPressure1hUsd: number;
+    weightedFunding: number | null;
+  };
   sources: {
     funding: number | null;
     name: string;

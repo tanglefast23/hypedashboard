@@ -18,6 +18,8 @@ export async function getCrowdingData(input: { hypePrice: number; orderFlow: Das
   const [venues, oiHistory] = await Promise.all([getVenueSnapshots(input.hypePrice), getOiHistory(input.hypePrice)]);
   const oiFundingScore = fundingCrowdingScore(venues);
   const liquidationScore = 0;
+  const oiChange24hPercent = oiChangePercent(oiHistory.day);
+  const flowNetUsd = weightedFlowNetUsd(input.orderFlow);
   const oiPriceScore = oiPriceCrowdingScore(oiHistory, input.priceChange1d);
   const flowScore = flowCrowdingScore(input.orderFlow);
   const twapScore = twapCrowdingScore(input.twaps, input.hypePrice, input.orderFlow);
@@ -27,6 +29,14 @@ export async function getCrowdingData(input: { hypePrice: number; orderFlow: Das
     breakdown: { flow: Math.round(flowScore), fundingOi: Math.round(oiFundingScore), liquidation: Math.round(liquidationScore), oiPrice: Math.round(oiPriceScore), twap: Math.round(twapScore) },
     generatedAt: new Date().toISOString(),
     label: crowdingLabel(score),
+    metrics: {
+      flowNetUsd,
+      liquidationImbalanceUsd: null,
+      oiChange24hPercent,
+      priceChange24hPercent: input.priceChange1d,
+      twapPressure1hUsd: input.twaps.pressure.next1h,
+      weightedFunding: weightedFunding(venues),
+    },
     score: Math.round(score),
     sources: venues.map((venue) => ({ funding: venue.funding, name: venue.name, oiUsd: venue.oiUsd, source: venue.source })),
     summary: crowdingSummary(score, flowScore, oiPriceScore),
@@ -165,11 +175,33 @@ function mergeOiBars(series: OiPoint[][], count: number): OiPoint[] {
 }
 
 function fundingCrowdingScore(venues: VenueSnapshot[]): number {
+  const value = weightedFunding(venues);
+  return value === null ? 0 : clampScore((value / 0.00015) * 100);
+}
+
+function weightedFunding(venues: VenueSnapshot[]): number | null {
   const funded = venues.filter((venue) => venue.funding !== null && venue.oiUsd > 0);
   const total = funded.reduce((sum, venue) => sum + venue.oiUsd, 0);
-  if (!total) return 0;
-  const weightedFunding = funded.reduce((sum, venue) => sum + (venue.funding ?? 0) * venue.oiUsd, 0) / total;
-  return clampScore((weightedFunding / 0.00015) * 100);
+  if (!total) return null;
+  return funded.reduce((sum, venue) => sum + (venue.funding ?? 0) * venue.oiUsd, 0) / total;
+}
+
+function oiChangePercent(bars: OiPoint[]): number | null {
+  if (bars.length < 2) return null;
+  const first = bars[0].value;
+  const last = bars.at(-1)?.value ?? first;
+  return first ? ((last - first) / first) * 100 : null;
+}
+
+function weightedFlowNetUsd(orderFlow: DashboardData["orderFlow"]): number {
+  const frames = [{ id: "5m", weight: 0.5 }, { id: "15m", weight: 0.3 }, { id: "1h", weight: 0.2 }] as const;
+  return frames.reduce((sum, frame) => sum + flowNetUsd(orderFlow.perps.marketTrades[frame.id]) * frame.weight, 0);
+}
+
+function flowNetUsd(flow: { buys: { value: number }[]; sells: { value: number }[] }): number {
+  const buy = flow.buys.reduce((sum, row) => sum + row.value, 0);
+  const sell = flow.sells.reduce((sum, row) => sum + row.value, 0);
+  return buy - sell;
 }
 
 function oiPriceCrowdingScore(history: Record<CrowdingRange, OiPoint[]>, priceChange1d: number | null): number {

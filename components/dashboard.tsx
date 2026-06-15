@@ -156,11 +156,11 @@ function CrowdingPanel({ data, onRange, range }: { data: DashboardData; onRange:
         </div>
         <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3">
           <p className="mb-2 text-xs uppercase tracking-[0.18em] text-slate-500">Score weights</p>
-          <CrowdingWeightRow label="OI/Funding crowding" score={crowding.breakdown.fundingOi} weight="35%" />
-          <CrowdingWeightRow label="Liquidation imbalance" note="pending source" score={crowding.breakdown.liquidation} weight="25%" />
-          <CrowdingWeightRow label="Price/OI trap behavior" score={crowding.breakdown.oiPrice} weight="20%" />
-          <CrowdingWeightRow label="Taker-flow reversal" score={crowding.breakdown.flow} weight="15%" />
-          <CrowdingWeightRow label="TWAP pressure" score={crowding.breakdown.twap} weight="5%" />
+          <CrowdingWeightRow label="OI/Funding crowding" metric={formatFundingMetric(crowding.metrics.weightedFunding)} score={crowding.breakdown.fundingOi} weight="35%" />
+          <CrowdingWeightRow label="Liquidation imbalance" metric={formatLiquidationMetric(crowding.metrics.liquidationImbalanceUsd)} note="pending source" score={crowding.breakdown.liquidation} weight="25%" />
+          <CrowdingWeightRow label="Price/OI trap behavior" metric={formatOiPriceMetric(crowding.metrics.oiChange24hPercent, crowding.metrics.priceChange24hPercent)} score={crowding.breakdown.oiPrice} weight="20%" />
+          <CrowdingWeightRow label="Taker-flow reversal" metric={signedUsd(crowding.metrics.flowNetUsd)} score={crowding.breakdown.flow} weight="15%" />
+          <CrowdingWeightRow label="TWAP pressure" metric={signedUsd(crowding.metrics.twapPressure1hUsd)} score={crowding.breakdown.twap} weight="5%" />
         </div>
       </div>
       <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
@@ -175,13 +175,30 @@ function CrowdingMini({ label, tone, value }: { label: string; tone: string; val
   return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{label}</p><p className={`mono mt-1 text-lg font-semibold ${tone}`}>{value}</p></div>;
 }
 
-function CrowdingWeightRow({ label, note, score, weight }: { label: string; note?: string; score: number; weight: string }) {
+function CrowdingWeightRow({ label, metric, note, score, weight }: { label: string; metric: string; note?: string; score: number; weight: string }) {
   return (
     <div className="flex items-center justify-between gap-3 border-t border-slate-800/80 py-2 first:border-t-0">
-      <div className="min-w-0"><p className="truncate text-xs text-slate-300"><span className="mono text-slate-500">{weight}</span> {label}</p>{note ? <p className="mt-0.5 text-[10px] text-slate-600">{note}</p> : null}</div>
+      <div className="min-w-0"><p className="truncate text-xs text-slate-300"><span className="mono text-slate-500">{weight}</span> {label}</p><p className="mt-0.5 truncate text-[10px] text-slate-500">{metric}{note ? ` · ${note}` : ""}</p></div>
       <span className={`mono text-sm font-semibold ${scoreToneForCrowding(score)}`}>{signedScore(score)}</span>
     </div>
   );
+}
+
+function formatFundingMetric(value: number | null): string {
+  return value === null ? "funding n/a" : `weighted funding ${signedPercent(value * 100)}`;
+}
+
+function formatLiquidationMetric(value: number | null): string {
+  return value === null ? "liq imbalance n/a" : `liq imbalance ${signedUsd(value)}`;
+}
+
+function formatOiPriceMetric(oiChange: number | null, priceChange: number | null): string {
+  return `OI ${signedPercent(oiChange)} · price ${signedPercent(priceChange)}`;
+}
+
+function signedPercent(value: number | null): string {
+  if (value === null) return "n/a";
+  return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
 
 function CrowdingBar({ bar, maxAbs }: { bar: DashboardData["crowding"]["bars"]["day"][number]; maxAbs: number }) {
