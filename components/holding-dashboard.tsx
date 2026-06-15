@@ -96,9 +96,26 @@ function TwapPanel({ data }: { data: HoldingDashboardData }) {
 
 function VolumeChart({ data, range, onRange }: { data: HoldingDashboardData; range: VolumeRange; onRange: (range: VolumeRange) => void }) {
   const bars = range === "day" ? data.volume.hourlyVolume : range === "week" ? data.volume.weeklyVolume : data.volume.dailyVolume;
-  const max = Math.max(...bars.map((bar) => bar.volumeUsd), 1);
+  const projectedBars = bars.map((bar, index) => ({ bar, projection: getVolumeProjection(bar.volumeUsd, index, bars.length, range, data.generatedAt) }));
+  const max = Math.max(...projectedBars.map(({ bar, projection }) => bar.volumeUsd + projection), 1);
   const subtitle = range === "day" ? "Last 24 one-hour bars from Hyperliquid candles." : range === "week" ? "Last 7 daily bars from Hyperliquid candles." : "Last 30 daily bars from Hyperliquid candles.";
-  return <Card title={`${displayCoin(data.asset.coin)} Volume`} subtitle={subtitle} action={<div className="flex gap-2">{(["day", "week", "month"] as VolumeRange[]).map((option) => <button className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${range === option ? "bg-emerald-300 text-slate-950" : "border border-slate-700 text-slate-400 hover:text-slate-100"}`} key={option} onClick={() => onRange(option)}>{option}</button>)}</div>}><div className="h-56"><div className="flex h-full items-end gap-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">{bars.map((bar) => <div className="group flex h-full flex-1 flex-col justify-end gap-2" key={bar.label}><div className="relative flex flex-1 items-end"><div className="w-full rounded-t-md bg-emerald-300/80 transition-all group-hover:bg-emerald-200" style={{ height: `${Math.max(4, (bar.volumeUsd / max) * 100)}%` }} /><span className="pointer-events-none absolute bottom-full left-1/2 mb-2 hidden -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 mono text-xs text-slate-100 shadow-xl group-hover:block">{formatCompactUsdOneDecimal(bar.volumeUsd)}</span></div><span className="truncate text-center text-[10px] text-slate-500">{bar.label}</span></div>)}</div></div></Card>;
+  return <Card title={`${displayCoin(data.asset.coin)} Volume`} subtitle={subtitle} action={<div className="flex gap-2">{(["day", "week", "month"] as VolumeRange[]).map((option) => <button className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${range === option ? "bg-emerald-300 text-slate-950" : "border border-slate-700 text-slate-400 hover:text-slate-100"}`} key={option} onClick={() => onRange(option)}>{option}</button>)}</div>}><div className="h-56"><div className="flex h-full items-end gap-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">{projectedBars.map(({ bar, projection }) => <div className="group flex h-full flex-1 flex-col justify-end gap-2" key={bar.label}><div className="relative flex flex-1 items-end"><VolumeStack bar={bar.volumeUsd} max={max} projection={projection} label={bar.label} /></div><span className="truncate text-center text-[10px] text-slate-500">{bar.label}</span></div>)}</div></div></Card>;
+}
+
+function VolumeStack({ bar, label, max, projection }: { bar: number; label: string; max: number; projection: number }) {
+  const actualHeight = Math.max(4, (bar / max) * 100);
+  const projectionHeight = projection > 0 ? Math.max(2, (projection / max) * 100) : 0;
+  const title = projection > 0 ? `${label} ${formatCompactUsdOneDecimal(bar)} actual · ${formatCompactUsdOneDecimal(bar + projection)} projected` : `${label} ${formatCompactUsdOneDecimal(bar)}`;
+  return <div className="flex h-full w-full flex-col justify-end" title={title}>{projection > 0 ? <div className="w-full rounded-t-md border border-dashed border-emerald-100/60 bg-emerald-200/25 transition group-hover:bg-emerald-100/35" style={{ height: `${projectionHeight}%` }} /> : null}<div className={projection > 0 ? "w-full bg-emerald-300/80 transition-all group-hover:bg-emerald-200" : "w-full rounded-t-md bg-emerald-300/80 transition-all group-hover:bg-emerald-200"} style={{ height: `${actualHeight}%` }} /></div>;
+}
+
+function getVolumeProjection(value: number, index: number, count: number, range: VolumeRange, generatedAt: string): number {
+  if (index !== count - 1 || value <= 0) return 0;
+  const now = new Date(generatedAt);
+  const elapsedMs = range === "day" ? ((now.getUTCMinutes() * 60 + now.getUTCSeconds()) * 1_000 + now.getUTCMilliseconds()) : ((now.getUTCHours() * 3_600 + now.getUTCMinutes() * 60 + now.getUTCSeconds()) * 1_000 + now.getUTCMilliseconds());
+  const bucketMs = range === "day" ? 3_600_000 : 86_400_000;
+  const elapsedRatio = Math.min(0.98, Math.max(0.02, elapsedMs / bucketMs));
+  return Math.max(0, value / elapsedRatio - value);
 }
 
 function Card({ title, subtitle, action, children }: { title: string; subtitle?: string; action?: React.ReactNode; children: React.ReactNode }) {
