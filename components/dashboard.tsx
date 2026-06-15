@@ -157,7 +157,7 @@ function CrowdingPanel({ data, onRange, range }: { data: DashboardData; onRange:
         <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3">
           <p className="mb-2 text-xs uppercase tracking-[0.18em] text-slate-500">Score weights</p>
           <CrowdingWeightRow label="OI/Funding crowding" metric={formatFundingMetric(crowding.metrics.weightedFunding)} score={crowding.breakdown.fundingOi} weight="35%" />
-          <CrowdingWeightRow label="Liquidation imbalance" metric={formatLiquidationMetric(crowding.metrics.liquidationImbalanceUsd)} note="pending source" score={crowding.breakdown.liquidation} weight="25%" />
+          <CrowdingWeightRow label="Liquidation imbalance" metric={formatLiquidationMetric(crowding.metrics.liquidationImbalanceUsd)} note={crowding.metrics.liquidationImbalanceUsd === null ? "needs COINALYZE_API_KEY" : "1h realized long-short liqs"} score={crowding.breakdown.liquidation} weight="25%" />
           <CrowdingWeightRow label="Price/OI trap behavior" metric={formatOiPriceMetric(crowding.metrics.oiChange24hPercent, crowding.metrics.priceChange24hPercent)} score={crowding.breakdown.oiPrice} weight="20%" />
           <CrowdingWeightRow label="Taker-flow reversal" metric={signedUsd(crowding.metrics.flowNetUsd)} score={crowding.breakdown.flow} weight="15%" />
           <CrowdingWeightRow label="TWAP pressure" metric={signedUsd(crowding.metrics.twapPressure1hUsd)} score={crowding.breakdown.twap} weight="5%" />

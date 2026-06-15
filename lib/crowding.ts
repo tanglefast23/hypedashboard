@@ -1,3 +1,4 @@
+import { getCoinalyzeLiquidationImbalance } from "./coinalyze";
 import { getStoredCrowdingBars } from "./crowding-history";
 import type { DashboardData } from "./types";
 
@@ -22,9 +23,13 @@ export async function getCrowdingData(input: { hypePrice: number; orderFlow: Das
 }
 
 export async function getCurrentCrowdingData(input: { hypePrice: number; orderFlow: DashboardData["orderFlow"]; priceChange1d: number | null; twaps: DashboardData["twaps"] }): Promise<DashboardData["crowding"]> {
-  const [venues, oiHistory] = await Promise.all([getVenueSnapshots(input.hypePrice), getOiHistory(input.hypePrice)]);
+  const [venues, oiHistory, liquidation] = await Promise.all([
+    getVenueSnapshots(input.hypePrice),
+    getOiHistory(input.hypePrice),
+    getCoinalyzeLiquidationImbalance().catch(() => null),
+  ]);
   const oiFundingScore = fundingCrowdingScore(venues);
-  const liquidationScore = 0;
+  const liquidationScore = liquidation?.score ?? 0;
   const oiChange24hPercent = oiChangePercent(oiHistory.day);
   const flowNetUsd = weightedFlowNetUsd(input.orderFlow);
   const oiPriceScore = oiPriceCrowdingScore(oiHistory, input.priceChange1d);
@@ -38,7 +43,7 @@ export async function getCurrentCrowdingData(input: { hypePrice: number; orderFl
     label: crowdingLabel(score),
     metrics: {
       flowNetUsd,
-      liquidationImbalanceUsd: null,
+      liquidationImbalanceUsd: liquidation?.imbalanceUsd ?? null,
       oiChange24hPercent,
       priceChange24hPercent: input.priceChange1d,
       twapPressure1hUsd: input.twaps.pressure.next1h,
