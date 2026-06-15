@@ -64,7 +64,9 @@ export async function getCoinalyzeLiquidationImbalance(): Promise<LiquidationImb
   });
   const totals = sumLiquidations(histories);
   const total = totals.longLiquidationsUsd + totals.shortLiquidationsUsd;
-  const value = total ? { ...totals, imbalanceUsd: totals.longLiquidationsUsd - totals.shortLiquidationsUsd, score: ((totals.longLiquidationsUsd - totals.shortLiquidationsUsd) / total) * 100, sourceCount: histories.length } : null;
+  const imbalanceUsd = totals.longLiquidationsUsd - totals.shortLiquidationsUsd;
+  const confidence = Math.min(1, total / 1_000_000);
+  const value = total ? { ...totals, imbalanceUsd, score: (imbalanceUsd / total) * 100 * confidence, sourceCount: histories.length } : null;
   cachedLiquidation = { expiresAt: Date.now() + 60 * 1000, value };
   return value;
 }

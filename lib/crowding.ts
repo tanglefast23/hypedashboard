@@ -263,7 +263,9 @@ function flowCrowdingScore(orderFlow: DashboardData["orderFlow"]): number {
 function flowFrameScore(flow: { buys: { value: number }[]; sells: { value: number }[] }): number {
   const buy = flow.buys.reduce((sum, row) => sum + row.value, 0);
   const sell = flow.sells.reduce((sum, row) => sum + row.value, 0);
-  return buy + sell ? clampScore(((buy - sell) / (buy + sell)) * 100) : 0;
+  const total = buy + sell;
+  const confidence = Math.min(1, total / 1_000_000);
+  return total ? clampScore(((buy - sell) / total) * 100 * confidence) : 0;
 }
 
 function twapCrowdingScore(twaps: DashboardData["twaps"], hypePrice: number, orderFlow: DashboardData["orderFlow"]): number {
