@@ -3,7 +3,7 @@ import { buildDailyVolumeBars, buildHourlyVolumeBars, buildLimitFillFlow, buildM
 import type { HeaderTimeframeId, TimeframeId } from "./order-flow";
 import { calculatePriceChangePercent } from "./price-change";
 import { collectHypeTrades, getStoredVenueFlows } from "./trade-history";
-import { buildTwapPressure, normalizeAssetTwapRows, normalizeTwapRows } from "./twap";
+import { aggregateUserTwapExecutedSizes, buildTwapPressure, normalizeAssetTwapRows, normalizeTwapRows, normalizeUserTwapHistory } from "./twap";
 import type { Candle, DashboardData, HoldingDashboardData } from "./types";
 
 const HYPERLIQUID_INFO_URLS = ["https://api.hyperliquid.xyz/info", "https://api-ui.hyperliquid.xyz/info"];
@@ -272,10 +272,22 @@ function normalizePerpCoin(coin: string): string {
 function dexForCoin(coin: string): string | undefined { return coin.includes(":") ? coin.split(":")[0] : undefined; }
 
 async function getHoldingTwaps(coin: string, price: number): Promise<HoldingDashboardData["twaps"]> {
-  return cached(`holding-twaps-${coin}`, 30_000, async () => {
-    const [rawRows, asset] = await Promise.all([getJson(HYPURRSCAN_TWAPS_URL), getPerpAssetIndex(coin)]);
+  return cached(`holding-twaps-${coin}-v2`, 30_000, async () => {
+    const [rawRowsResult, assetResult, userHistoryResult, userFillsResult] = await Promise.allSettled([
+      getJson(HYPURRSCAN_TWAPS_URL),
+      getPerpAssetIndex(coin),
+      postHyperliquid({ type: "twapHistory", user: WATCHED_PERP_ADDRESS }),
+      postHyperliquid({ type: "userTwapSliceFills", user: WATCHED_PERP_ADDRESS }),
+    ]);
     const now = Date.now();
-    const rows = asset === null ? [] : normalizeAssetTwapRows(z.array(z.unknown()).parse(rawRows), { assetMap: { [asset]: { token: coin, price } }, now });
+    const rawRows = rawRowsResult.status === "fulfilled" ? z.array(z.unknown()).parse(rawRowsResult.value) : [];
+    const asset = assetResult.status === "fulfilled" ? assetResult.value : null;
+    const userHistory = userHistoryResult.status === "fulfilled" ? z.array(z.unknown()).parse(userHistoryResult.value) : [];
+    const userFills = userFillsResult.status === "fulfilled" ? z.array(z.unknown()).parse(userFillsResult.value) : [];
+    const executedSizeById = aggregateUserTwapExecutedSizes(userFills, coin);
+    const publicRows = asset === null ? [] : normalizeAssetTwapRows(rawRows, { assetMap: { [asset]: { token: coin, price } }, now });
+    const userRows = normalizeUserTwapHistory(userHistory, { coin, executedSizeById, now, price });
+    const rows = dedupeTwaps([...userRows, ...publicRows]);
     return { pressure: buildTwapPressure(rows, now), rows };
   });
 }
@@ -296,6 +308,10 @@ async function getPerpCandles(coin: string, interval: string, durationMs: number
     const raw = await postHyperliquid({ type: "candleSnapshot", req: { coin, interval, startTime, endTime } });
     return z.array(z.record(z.unknown())).parse(raw).map(parseCandle).filter(isCandle);
   });
+}
+
+function dedupeTwaps<T extends { hash: string; value: number }>(rows: T[]): T[] {
+  return [...new Map(rows.map((row) => [row.hash, row])).values()].sort((a, b) => b.value - a.value);
 }
 
 export async function getHoldingDashboardData(coin: string): Promise<HoldingDashboardData> {

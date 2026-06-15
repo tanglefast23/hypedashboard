@@ -36,6 +36,29 @@ const twapRowSchema = z.object({
   }),
 });
 
+const userTwapHistorySchema = z.object({
+  time: z.number(),
+  state: z.object({
+    coin: z.string(),
+    user: z.string(),
+    side: z.enum(["A", "B"]),
+    sz: z.string(),
+    executedSz: z.string(),
+    minutes: z.number(),
+    timestamp: z.number(),
+  }),
+  status: z.object({ status: z.string() }),
+  twapId: z.number(),
+});
+
+const userTwapSliceFillSchema = z.object({
+  twapId: z.number(),
+  fill: z.object({
+    coin: z.string(),
+    sz: z.string(),
+  }),
+});
+
 export function normalizeTwapRows(rawRows: unknown[], options: { hypeMarketIds: number[]; hypePrice: number; now: number }): HypeTwap[] {
   const assetMap = Object.fromEntries(options.hypeMarketIds.map((id) => [id, { token: id >= 10000 ? "HYPE" : "HYPE-USD", price: options.hypePrice }]));
   return normalizeAssetTwapRows(rawRows, { assetMap, now: options.now });
@@ -43,6 +66,28 @@ export function normalizeTwapRows(rawRows: unknown[], options: { hypeMarketIds: 
 
 export function normalizeAssetTwapRows(rawRows: unknown[], options: { assetMap: Record<number, { token: string; price: number }>; now: number }): HypeTwap[] {
   return rawRows.map((row) => parseTwapRow(row, options)).filter(isHypeTwap).sort((a, b) => b.value - a.value);
+}
+
+export function aggregateUserTwapExecutedSizes(rawRows: unknown[], coin: string): Record<number, number> {
+  return rawRows.reduce<Record<number, number>>((totals, raw) => {
+    const parsed = userTwapSliceFillSchema.safeParse(raw);
+    if (!parsed.success || parsed.data.fill.coin !== coin) return totals;
+    const size = Number(parsed.data.fill.sz);
+    if (!Number.isFinite(size)) return totals;
+    totals[parsed.data.twapId] = (totals[parsed.data.twapId] ?? 0) + size;
+    return totals;
+  }, {});
+}
+
+export function normalizeUserTwapHistory(rawRows: unknown[], options: { coin: string; executedSizeById?: Record<number, number>; now: number; price: number }): HypeTwap[] {
+  const latest = new Map<number, z.infer<typeof userTwapHistorySchema>>();
+  for (const raw of rawRows) {
+    const parsed = userTwapHistorySchema.safeParse(raw);
+    if (!parsed.success || parsed.data.state.coin !== options.coin) continue;
+    const current = latest.get(parsed.data.twapId);
+    if (!current || parsed.data.time >= current.time) latest.set(parsed.data.twapId, parsed.data);
+  }
+  return [...latest.values()].map((row) => parseUserTwap(row, options)).filter(isHypeTwap).sort((a, b) => b.value - a.value);
 }
 
 export function calculateTwapPressure(rows: HypeTwap[], windowMs: number, now: number): number {
@@ -80,6 +125,32 @@ function parseTwapRow(raw: unknown, options: { assetMap: Record<number, { token:
     token: asset.token,
     user: parsed.data.user,
     value: amount * asset.price,
+  };
+}
+
+function parseUserTwap(row: z.infer<typeof userTwapHistorySchema>, options: { coin: string; executedSizeById?: Record<number, number>; now: number; price: number }): HypeTwap | null {
+  if (row.status.status !== "activated") return null;
+  const totalAmount = Number(row.state.sz);
+  const historyExecutedAmount = Number(row.state.executedSz);
+  const executedAmount = Math.max(Number.isFinite(historyExecutedAmount) ? historyExecutedAmount : 0, options.executedSizeById?.[row.twapId] ?? 0);
+  if (!Number.isFinite(totalAmount) || !Number.isFinite(executedAmount)) return null;
+  const amount = Math.max(0, totalAmount - executedAmount);
+  const durationMs = row.state.minutes * 60 * 1000;
+  const endTime = row.state.timestamp + durationMs;
+  if (amount <= 0 || durationMs <= 0 || endTime <= options.now) return null;
+  return {
+    amount,
+    asset: -1,
+    durationMs,
+    endTime,
+    hash: `user-twap-${row.twapId}`,
+    progress: Math.min(1, Math.max(0, (options.now - row.state.timestamp) / durationMs)),
+    remainingMs: Math.max(0, endTime - options.now),
+    side: row.state.side === "B" ? "BUY" : "SELL",
+    startTime: row.state.timestamp,
+    token: options.coin,
+    user: row.state.user,
+    value: amount * options.price,
   };
 }
 
