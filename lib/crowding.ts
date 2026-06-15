@@ -18,13 +18,13 @@ type OiSeries = { name: string; points: OiPoint[]; weightBoost: number };
 const HYPERLIQUID_INFO_URLS = ["https://api.hyperliquid.xyz/info", "https://api-ui.hyperliquid.xyz/info"];
 const PRICE_FALLBACK = 1;
 
-export async function getCrowdingData(input: { hypePrice: number; orderFlow: DashboardData["orderFlow"]; priceChange1d: number | null; twaps: DashboardData["twaps"] }): Promise<DashboardData["crowding"]> {
+export async function getCrowdingData(input: { hypePrice: number; orderFlow: DashboardData["orderFlow"]; priceChange1d: number | null; rsi14: number | null; twaps: DashboardData["twaps"] }): Promise<DashboardData["crowding"]> {
   const current = await getCurrentCrowdingData(input);
   const storedBars = await getStoredCrowdingBars().catch(() => null);
   return storedBars ? { ...current, bars: { ...current.bars, ...storedBars } } : current;
 }
 
-export async function getCurrentCrowdingData(input: { hypePrice: number; orderFlow: DashboardData["orderFlow"]; priceChange1d: number | null; twaps: DashboardData["twaps"] }): Promise<DashboardData["crowding"]> {
+export async function getCurrentCrowdingData(input: { hypePrice: number; orderFlow: DashboardData["orderFlow"]; priceChange1d: number | null; rsi14: number | null; twaps: DashboardData["twaps"] }): Promise<DashboardData["crowding"]> {
   const [venues, oiHistory, liquidation, coinalyzeOiChange] = await Promise.all([
     getVenueSnapshots(input.hypePrice),
     getOiHistory(input.hypePrice),
@@ -39,7 +39,9 @@ export async function getCurrentCrowdingData(input: { hypePrice: number; orderFl
   const oiPriceScore = oiPriceCrowdingScore(oiChange24hPercent, input.priceChange1d, weightedFunding(venues));
   const flowScore = flowCrowdingScore(input.orderFlow);
   const twapScore = twapCrowdingScore(input.twaps, input.hypePrice, input.orderFlow);
-  const score = clampScore(0.35 * oiFundingScore + 0.25 * liquidationScore + 0.2 * oiPriceScore + 0.15 * flowScore + 0.05 * twapScore);
+  const baseScore = clampScore(0.35 * oiFundingScore + 0.25 * liquidationScore + 0.2 * oiPriceScore + 0.15 * flowScore + 0.05 * twapScore);
+  const rsiModifier = rsiExhaustionModifier(baseScore, input.rsi14);
+  const score = clampScore(baseScore * rsiModifier);
   return {
     bars: buildCrowdingBars(oiHistory.ranges, score),
     breakdown: { flow: Math.round(flowScore), fundingOi: Math.round(oiFundingScore), liquidation: Math.round(liquidationScore), oiPrice: Math.round(oiPriceScore), twap: Math.round(twapScore) },
@@ -50,6 +52,8 @@ export async function getCurrentCrowdingData(input: { hypePrice: number; orderFl
       liquidationImbalanceUsd: liquidation?.imbalanceUsd ?? null,
       oiChange24hPercent,
       priceChange24hPercent: input.priceChange1d,
+      rsi14: input.rsi14,
+      rsiModifier,
       twapPressure1hUsd: input.twaps.pressure.next1h,
       weightedFunding: weightedFunding(venues),
     },
@@ -253,6 +257,21 @@ function oiPriceCrowdingScore(oiChange24hPercent: number | null, priceChange1d: 
   const trapMultiplier = isFlat || priceChange1d * direction < 0 ? 1 : 0.55;
   const trendCap = isTrendContinuation ? 60 : 100;
   return clampScore(direction * Math.min(base * trapMultiplier, trendCap));
+}
+
+function rsiExhaustionModifier(baseScore: number, rsi: number | null): number {
+  if (rsi === null || Math.abs(baseScore) < 20) return 1;
+  if (baseScore > 0) {
+    if (rsi >= 80) return 1.06;
+    if (rsi >= 70) return 1.03;
+    if (rsi <= 45) return 0.97;
+  }
+  if (baseScore < 0) {
+    if (rsi <= 20) return 1.06;
+    if (rsi <= 30) return 1.03;
+    if (rsi >= 55) return 0.97;
+  }
+  return 1;
 }
 
 function flowCrowdingScore(orderFlow: DashboardData["orderFlow"]): number {

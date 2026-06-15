@@ -344,10 +344,22 @@ export async function getHoldingDashboardData(coin: string): Promise<HoldingDash
   };
 }
 
+function calculateRsi(candles: Candle[], currentPrice: number, period = 14): number | null {
+  const closes = [...candles.slice(-(period + 1)).map((candle) => candle.close), currentPrice].filter((value) => Number.isFinite(value) && value > 0);
+  if (closes.length < period + 1) return null;
+  const changes = closes.slice(1).map((close, index) => close - closes[index]);
+  const recent = changes.slice(-period);
+  const gains = recent.reduce((sum, change) => sum + Math.max(change, 0), 0) / period;
+  const losses = recent.reduce((sum, change) => sum + Math.max(-change, 0), 0) / period;
+  if (losses === 0) return gains === 0 ? 50 : 100;
+  const rs = gains / losses;
+  return 100 - 100 / (1 + rs);
+}
+
 export async function getDashboardData(): Promise<DashboardData> {
   const [candles, weeklyCandles, monthlyCandles] = await Promise.all([getHypeCandles24h(), getHypeCandles7d(), getHypeCandles30d()]);
   const hype = await getHypeMarket(candles, weeklyCandles);
   const [twaps, orderFlow, accountPerps] = await Promise.all([getHypeTwaps(hype.price), getOrderFlow(hype.price, candles, monthlyCandles), getAccountPerpWatch()]);
-  const crowding = await getCrowdingData({ hypePrice: hype.price, orderFlow, priceChange1d: hype.changes["1d"], twaps });
+  const crowding = await getCrowdingData({ hypePrice: hype.price, orderFlow, priceChange1d: hype.changes["1d"], rsi14: calculateRsi(weeklyCandles, hype.price), twaps });
   return { generatedAt: new Date().toISOString(), hype, twaps, orderFlow, accountPerps, crowding };
 }

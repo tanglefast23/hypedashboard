@@ -161,6 +161,7 @@ function CrowdingPanel({ data, onRange, range }: { data: DashboardData; onRange:
           <CrowdingWeightRow label="Price/OI trap behavior" metric={formatOiPriceMetric(crowding.metrics.oiChange24hPercent, crowding.metrics.priceChange24hPercent)} score={crowding.breakdown.oiPrice} weight="20%" />
           <CrowdingWeightRow label="Taker-flow reversal" metric={signedUsd(crowding.metrics.flowNetUsd)} score={crowding.breakdown.flow} weight="15%" />
           <CrowdingWeightRow label="TWAP pressure" metric={signedUsd(crowding.metrics.twapPressure1hUsd)} score={crowding.breakdown.twap} weight="5%" />
+          <div className="border-t border-slate-800/80 pt-2"><p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">RSI modifier</p><p className="mono mt-1 text-sm font-medium text-slate-400">{formatRsiModifier(crowding.metrics.rsi14, crowding.metrics.rsiModifier)}</p></div>
         </div>
       </div>
       <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
@@ -194,6 +195,13 @@ function formatLiquidationMetric(value: number | null): string {
 
 function formatOiPriceMetric(oiChange: number | null, priceChange: number | null): string {
   return `OI ${signedPercent(oiChange)} · price ${signedPercent(priceChange)}`;
+}
+
+function formatRsiModifier(rsi: number | null, modifier: number): string {
+  const rsiText = rsi === null ? "RSI n/a" : `RSI ${rsi.toFixed(1)}`;
+  if (modifier > 1) return `${modifier.toFixed(2)}x · ${rsiText} confirms exhaustion`;
+  if (modifier < 1) return `${modifier.toFixed(2)}x · ${rsiText} dampens crowding`;
+  return `1.00x · ${rsiText} neutral`;
 }
 
 function signedPercent(value: number | null): string {

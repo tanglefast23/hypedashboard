@@ -122,6 +122,8 @@ export type CrowdingData = {
     liquidationImbalanceUsd: number | null;
     oiChange24hPercent: number | null;
     priceChange24hPercent: number | null;
+    rsi14: number | null;
+    rsiModifier: number;
     twapPressure1hUsd: number;
     weightedFunding: number | null;
   };
