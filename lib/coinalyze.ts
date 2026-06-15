@@ -3,9 +3,9 @@ const MARKET_CACHE_MS = 6 * 60 * 60 * 1000;
 const LIQUIDATION_WINDOW_SECONDS = 60 * 60;
 const MAX_SYMBOLS = 20;
 
-let cachedHypeSymbols: { expiresAt: number; symbols: string[] } | null = null;
-let cachedLiquidation: { expiresAt: number; value: LiquidationImbalance | null } | null = null;
-let cachedOiChange: { expiresAt: number; value: number | null } | null = null;
+const cachedSymbols = new Map<string, { expiresAt: number; symbols: string[] }>();
+const cachedLiquidation = new Map<string, { expiresAt: number; value: LiquidationImbalance | null }>();
+const cachedOiChange = new Map<string, { expiresAt: number; value: number | null }>();
 
 type FutureMarket = {
   base_asset?: string;
@@ -29,11 +29,13 @@ export type LiquidationImbalance = {
   sourceCount: number;
 };
 
-export async function getCoinalyzeOiChangePercent(): Promise<number | null> {
-  if (cachedOiChange && cachedOiChange.expiresAt > Date.now()) return cachedOiChange.value;
+export async function getCoinalyzeOiChangePercent(baseAsset = "HYPE"): Promise<number | null> {
+  const cacheKey = normalizeBaseAsset(baseAsset);
+  const cached = cachedOiChange.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
   const apiKey = process.env.COINALYZE_API_KEY;
   if (!apiKey) return null;
-  const symbols = await getHypeSymbols(apiKey);
+  const symbols = await getPerpSymbols(apiKey, cacheKey);
   if (!symbols.length) return null;
   const now = Math.floor(Date.now() / 1000);
   const histories = await getCoinalyze<OpenInterestHistory[]>("/open-interest-history", apiKey, {
@@ -44,15 +46,17 @@ export async function getCoinalyzeOiChangePercent(): Promise<number | null> {
     to: String(now),
   });
   const value = weightedOpenInterestChange(histories);
-  cachedOiChange = { expiresAt: Date.now() + 60 * 1000, value };
+  cachedOiChange.set(cacheKey, { expiresAt: Date.now() + 60 * 1000, value });
   return value;
 }
 
-export async function getCoinalyzeLiquidationImbalance(): Promise<LiquidationImbalance | null> {
-  if (cachedLiquidation && cachedLiquidation.expiresAt > Date.now()) return cachedLiquidation.value;
+export async function getCoinalyzeLiquidationImbalance(baseAsset = "HYPE"): Promise<LiquidationImbalance | null> {
+  const cacheKey = normalizeBaseAsset(baseAsset);
+  const cached = cachedLiquidation.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
   const apiKey = process.env.COINALYZE_API_KEY;
   if (!apiKey) return null;
-  const symbols = await getHypeSymbols(apiKey);
+  const symbols = await getPerpSymbols(apiKey, cacheKey);
   if (!symbols.length) return null;
   const now = Math.floor(Date.now() / 1000);
   const histories = await getCoinalyze<LiquidationHistory[]>("/liquidation-history", apiKey, {
@@ -67,21 +71,25 @@ export async function getCoinalyzeLiquidationImbalance(): Promise<LiquidationImb
   const imbalanceUsd = totals.longLiquidationsUsd - totals.shortLiquidationsUsd;
   const confidence = Math.min(1, total / 1_000_000);
   const value = total ? { ...totals, imbalanceUsd, score: (imbalanceUsd / total) * 100 * confidence, sourceCount: histories.length } : null;
-  cachedLiquidation = { expiresAt: Date.now() + 60 * 1000, value };
+  cachedLiquidation.set(cacheKey, { expiresAt: Date.now() + 60 * 1000, value });
   return value;
 }
 
-async function getHypeSymbols(apiKey: string): Promise<string[]> {
-  if (cachedHypeSymbols && cachedHypeSymbols.expiresAt > Date.now()) return cachedHypeSymbols.symbols;
+async function getPerpSymbols(apiKey: string, baseAsset: string): Promise<string[]> {
+  const cacheKey = normalizeBaseAsset(baseAsset);
+  const cached = cachedSymbols.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.symbols;
   const markets = await getCoinalyze<FutureMarket[]>("/future-markets", apiKey, {});
-  const symbols = markets.filter(isHypePerpMarket).sort(compareMarkets).map((market) => market.symbol).filter(isString).slice(0, MAX_SYMBOLS);
-  cachedHypeSymbols = { expiresAt: Date.now() + MARKET_CACHE_MS, symbols };
+  const symbols = markets.filter((market) => isPerpMarket(market, cacheKey)).sort(compareMarkets).map((market) => market.symbol).filter(isString).slice(0, MAX_SYMBOLS);
+  cachedSymbols.set(cacheKey, { expiresAt: Date.now() + MARKET_CACHE_MS, symbols });
   return symbols;
 }
 
-function isHypePerpMarket(market: FutureMarket): boolean {
-  return market.base_asset === "HYPE" && market.is_perpetual === true && market.margined === "STABLE" && market.quote_asset === "USDT" && typeof market.symbol === "string";
+function isPerpMarket(market: FutureMarket, baseAsset: string): boolean {
+  return normalizeBaseAsset(market.base_asset ?? "") === baseAsset && market.is_perpetual === true && market.margined === "STABLE" && market.quote_asset === "USDT" && typeof market.symbol === "string";
 }
+
+function normalizeBaseAsset(baseAsset: string): string { return baseAsset.trim().toUpperCase(); }
 
 function compareMarkets(a: FutureMarket, b: FutureMarket): number {
   return marketPriority(a.exchange) - marketPriority(b.exchange);

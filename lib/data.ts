@@ -2,6 +2,7 @@ import { z } from "zod";
 import { buildDailyVolumeBars, buildHourlyVolumeBars, buildLimitFillFlow, buildMarketFlow, buildWeeklyVolumeBars, FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, PERFORMANCE_TIMEFRAMES } from "./order-flow";
 import type { HeaderTimeframeId, TimeframeId } from "./order-flow";
 import { getCrowdingData } from "./crowding";
+import { getCoinalyzeLiquidationImbalance, getCoinalyzeOiChangePercent } from "./coinalyze";
 import { calculatePriceChangePercent } from "./price-change";
 import { collectHypeTrades, getStoredVenueFlows } from "./trade-history";
 import { aggregateUserTwapExecutedSizes, buildTwapPressure, normalizeAssetTwapRows, normalizeTwapRows, normalizeUserTwapHistory } from "./twap";
@@ -398,12 +399,27 @@ async function getGenericCrowdingData(coin: string, market: DashboardData["hype"
   const ctx = ctxsRaw[index] ?? {};
   const oiUsd = (toNumber(ctx.openInterest) ?? 0) * (toNumber(ctx.markPx) ?? market.price);
   const funding = toNumber(ctx.funding);
+  const [liquidation, coinalyzeOiChange] = await Promise.all([
+    getCoinalyzeLiquidationImbalance(coin).catch(() => null),
+    getCoinalyzeOiChangePercent(coin).catch(() => null),
+  ]);
   const fundingScore = funding === null ? 0 : Math.max(-100, Math.min(100, funding * 1_000_000));
   const flowNetUsd = weightedMarketNet(orderFlow);
   const flowScore = Math.max(-100, Math.min(100, flowNetUsd / 10_000));
   const twapScore = Math.max(-100, Math.min(100, (-twaps.pressure.next1h / Math.max(orderFlow.hourlyVolume.at(-1)?.volumeUsd ?? 1, 1)) * 100));
-  const score = Math.round(Math.max(-100, Math.min(100, 0.35 * fundingScore + 0.15 * flowScore + 0.05 * twapScore)));
-  return { bars: neutralCrowdingBars(oiUsd, score), breakdown: { flow: Math.round(flowScore), fundingOi: Math.round(fundingScore), liquidation: 0, oiPrice: 0, twap: Math.round(twapScore) }, generatedAt: new Date().toISOString(), label: score > 50 ? "Crowded Long" : score > 20 ? "Long-Leaning" : score < -50 ? "Crowded Short" : score < -20 ? "Short-Leaning" : "Balanced", metrics: { flowNetUsd, liquidationImbalanceUsd: null, oiChange24hPercent: null, priceChange24hPercent: market.changes["1d"], rsi14, rsiModifier: 1, twapPressure1hUsd: twaps.pressure.next1h, weightedFunding: funding }, score, sources: oiUsd ? [{ funding, name: "Hyperliquid", oiUsd, source: "official" }] : [], summary: "Perp positioning uses Hyperliquid-native funding, taker flow, TWAP pressure, and current OI for this market.", totalOiUsd: oiUsd };
+  const oiPriceScore = genericOiPriceCrowdingScore(coinalyzeOiChange, market.changes["1d"], funding);
+  const liquidationScore = liquidation?.score ?? 0;
+  const score = Math.round(Math.max(-100, Math.min(100, 0.35 * fundingScore + 0.25 * liquidationScore + 0.2 * oiPriceScore + 0.15 * flowScore + 0.05 * twapScore)));
+  return { bars: neutralCrowdingBars(oiUsd, score), breakdown: { flow: Math.round(flowScore), fundingOi: Math.round(fundingScore), liquidation: Math.round(liquidationScore), oiPrice: Math.round(oiPriceScore), twap: Math.round(twapScore) }, generatedAt: new Date().toISOString(), label: score > 50 ? "Crowded Long" : score > 20 ? "Long-Leaning" : score < -50 ? "Crowded Short" : score < -20 ? "Short-Leaning" : "Balanced", metrics: { flowNetUsd, liquidationImbalanceUsd: liquidation?.imbalanceUsd ?? null, oiChange24hPercent: coinalyzeOiChange, priceChange24hPercent: market.changes["1d"], rsi14, rsiModifier: 1, twapPressure1hUsd: twaps.pressure.next1h, weightedFunding: funding }, score, sources: oiUsd ? [{ funding, name: "Hyperliquid", oiUsd, source: "official" }] : [], summary: "Perp positioning uses Hyperliquid-native funding, taker flow, TWAP pressure, and current OI for this market.", totalOiUsd: oiUsd };
+}
+
+function genericOiPriceCrowdingScore(oiChange24hPercent: number | null, priceChange1d: number | null, funding: number | null): number {
+  if (oiChange24hPercent === null || priceChange1d === null || oiChange24hPercent <= 0) return 0;
+  const fundingDirection = funding !== null && Math.abs(funding) >= 0.00002 ? Math.sign(funding) : 0;
+  const direction = fundingDirection || (priceChange1d >= 0 ? 1 : -1);
+  const base = Math.max(-100, Math.min(100, (oiChange24hPercent / 100) * 350));
+  const trapMultiplier = Math.abs(priceChange1d) < 2 || priceChange1d * direction < 0 ? 1 : 0.55;
+  return direction * base * trapMultiplier;
 }
 
 function weightedMarketNet(orderFlow: DashboardData["orderFlow"]): number {
