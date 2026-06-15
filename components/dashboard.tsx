@@ -197,9 +197,9 @@ function formatOiPriceMetric(oiChange: number | null, priceChange: number | null
 
 function formatRsiModifier(rsi: number | null, modifier: number): string {
   const rsiText = rsi === null ? "RSI n/a" : `RSI ${rsi.toFixed(1)}`;
-  if (modifier > 1) return `${modifier.toFixed(2)}x · ${rsiText} confirms exhaustion`;
-  if (modifier < 1) return `${modifier.toFixed(2)}x · ${rsiText} dampens crowding`;
-  return `1.00x · ${rsiText} neutral`;
+  if (modifier > 1) return `${modifier.toFixed(2)}x · ${rsiText} confirms gated exhaustion`;
+  if (modifier < 1) return `${modifier.toFixed(2)}x · ${rsiText} dampens confirmed setup`;
+  return `1.00x · ${rsiText} no gated effect`;
 }
 
 function signedPercent(value: number | null): string {

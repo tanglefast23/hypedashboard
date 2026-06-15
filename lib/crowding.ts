@@ -40,7 +40,9 @@ export async function getCurrentCrowdingData(input: { hypePrice: number; orderFl
   const flowScore = flowCrowdingScore(input.orderFlow);
   const twapScore = twapCrowdingScore(input.twaps, input.hypePrice, input.orderFlow);
   const baseScore = clampScore(0.35 * oiFundingScore + 0.25 * liquidationScore + 0.2 * oiPriceScore + 0.15 * flowScore + 0.05 * twapScore);
-  const rsiModifier = rsiExhaustionModifier(baseScore, input.rsi14);
+  const positioningGateScore = 0.35 * oiFundingScore + 0.2 * oiPriceScore;
+  const flowGateScore = 0.25 * liquidationScore + 0.15 * flowScore + 0.05 * twapScore;
+  const rsiModifier = rsiExhaustionModifier({ baseScore, flowGateScore, positioningGateScore, rsi: input.rsi14 });
   const score = clampScore(baseScore * rsiModifier);
   return {
     bars: buildCrowdingBars(oiHistory.ranges, score),
@@ -259,14 +261,18 @@ function oiPriceCrowdingScore(oiChange24hPercent: number | null, priceChange1d: 
   return clampScore(direction * Math.min(base * trapMultiplier, trendCap));
 }
 
-function rsiExhaustionModifier(baseScore: number, rsi: number | null): number {
+function rsiExhaustionModifier({ baseScore, flowGateScore, positioningGateScore, rsi }: { baseScore: number; flowGateScore: number; positioningGateScore: number; rsi: number | null }): number {
   if (rsi === null || Math.abs(baseScore) < 20) return 1;
-  if (baseScore > 0) {
+  const direction = Math.sign(baseScore);
+  const positioningAgrees = Math.sign(positioningGateScore) === direction && Math.abs(positioningGateScore) >= 8;
+  const flowAgrees = Math.sign(flowGateScore) === direction && Math.abs(flowGateScore) >= 3;
+  if (!positioningAgrees || !flowAgrees) return 1;
+  if (direction > 0) {
     if (rsi >= 80) return 1.06;
     if (rsi >= 70) return 1.03;
     if (rsi <= 45) return 0.97;
   }
-  if (baseScore < 0) {
+  if (direction < 0) {
     if (rsi <= 20) return 1.06;
     if (rsi <= 30) return 1.03;
     if (rsi >= 55) return 0.97;
