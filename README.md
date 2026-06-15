@@ -11,7 +11,8 @@ A public, read-only, desktop-first dashboard for HYPE token flow and Hyperliquid
 - Separate HYPE perps and HYPE/USDC spot market buy/sell trade panels with timeframe pills; each side shows the top 50 trades by USD value with scrolling after 10 rows
 - Separate HYPE perps and HYPE/USDC spot filled limit buy/sell panels inferred from completed trades; each side shows the top 50 fills by USD value with scrolling after 10 rows
 - Live HYPE TWAP buy pressure with SPOT / PERPS / S+P filters, Next 5m/15m/1h/24h flow, math-based per-second ticking between API refreshes, plus a scrollable active TWAP section
-- No wallet connect, auth, database, or trading actions
+- Watched account perp section for `0x89c0fEe4b7CA37711219092CD1c0D2b4F7AF87c1`, showing its open perp positions and active TWAP pressure for each held perp market
+- No wallet connect, auth, or trading actions
 
 ## Data sources
 

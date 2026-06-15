@@ -3,12 +3,13 @@ import { buildDailyVolumeBars, buildHourlyVolumeBars, buildLimitFillFlow, buildM
 import type { HeaderTimeframeId, TimeframeId } from "./order-flow";
 import { calculatePriceChangePercent } from "./price-change";
 import { collectHypeTrades, getStoredVenueFlows } from "./trade-history";
-import { buildTwapPressure, normalizeTwapRows } from "./twap";
+import { buildTwapPressure, normalizeAssetTwapRows, normalizeTwapRows } from "./twap";
 import type { Candle, DashboardData } from "./types";
 
 const HYPERLIQUID_INFO_URLS = ["https://api.hyperliquid.xyz/info", "https://api-ui.hyperliquid.xyz/info"];
 const COINGECKO_URL = "https://api.coingecko.com/api/v3/coins/hyperliquid?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false";
 const HYPURRSCAN_TWAPS_URL = "https://api.hypurrscan.io/twap/*";
+const WATCHED_PERP_ADDRESS = "0x89c0fEe4b7CA37711219092CD1c0D2b4F7AF87c1";
 
 type CacheEntry = { expiresAt: number; value: unknown };
 const cache = new Map<string, CacheEntry>();
@@ -153,6 +154,62 @@ async function getHypeMarketIds(): Promise<number[]> {
   });
 }
 
+async function getAccountPerpWatch(): Promise<DashboardData["accountPerps"]> {
+  return cached("account-perp-watch-v1", 30_000, async () => {
+    const [stateRaw, metaRaw, midsRaw, twapsRaw] = await Promise.all([
+      postHyperliquid({ type: "clearinghouseState", user: WATCHED_PERP_ADDRESS }),
+      postHyperliquid({ type: "meta" }),
+      postHyperliquid({ type: "allMids" }),
+      getJson(HYPURRSCAN_TWAPS_URL),
+    ]);
+    const meta = z.object({ universe: z.array(z.record(z.unknown())) }).parse(metaRaw);
+    const mids = z.record(z.string()).parse(midsRaw);
+    const positions = parseAccountPerpPositions(stateRaw);
+    const assetMap = buildPerpAssetMap(positions, meta.universe, mids);
+    const rows = normalizeAssetTwapRows(z.array(z.unknown()).parse(twapsRaw), { assetMap, now: Date.now() });
+    return {
+      address: WATCHED_PERP_ADDRESS,
+      groups: positions.map((position) => ({ coin: position.coin, position, rows: rows.filter((row) => row.token === `${position.coin}-USD`) })),
+    };
+  });
+}
+
+function parseAccountPerpPositions(raw: unknown): DashboardData["accountPerps"]["groups"][number]["position"][] {
+  const state = z.object({ assetPositions: z.array(z.record(z.unknown())) }).parse(raw);
+  return state.assetPositions.map(parseAccountPosition).filter(isAccountPosition);
+}
+
+function parseAccountPosition(row: Record<string, unknown>): DashboardData["accountPerps"]["groups"][number]["position"] | null {
+  const position = row.position;
+  if (!position || typeof position !== "object") return null;
+  const p = position as Record<string, unknown>;
+  const coin = typeof p.coin === "string" ? p.coin : null;
+  const size = toNumber(p.szi);
+  const positionValue = toNumber(p.positionValue);
+  if (!coin || size === null || size === 0 || positionValue === null) return null;
+  return {
+    coin,
+    entryPx: toNumber(p.entryPx),
+    liquidationPx: toNumber(p.liquidationPx),
+    marginUsed: toNumber(p.marginUsed),
+    positionValue,
+    returnOnEquity: toNumber(p.returnOnEquity),
+    side: size > 0 ? "LONG" : "SHORT",
+    size: Math.abs(size),
+    unrealizedPnl: toNumber(p.unrealizedPnl),
+  };
+}
+
+function buildPerpAssetMap(positions: DashboardData["accountPerps"]["groups"][number]["position"][], universe: Record<string, unknown>[], mids: Record<string, string>) {
+  return Object.fromEntries(positions.flatMap((position): [number, { token: string; price: number }][] => {
+    const asset = universe.findIndex((market) => market.name === position.coin);
+    const price = toNumber(mids[position.coin]) ?? position.positionValue / Math.max(position.size, 1);
+    return asset >= 0 && price ? [[asset, { token: `${position.coin}-USD`, price }]] : [];
+  }));
+}
+
+function isAccountPosition(position: DashboardData["accountPerps"]["groups"][number]["position"] | null): position is DashboardData["accountPerps"]["groups"][number]["position"] { return position !== null; }
+
 function isHypeSpotMarket(market: Record<string, unknown>, hypeTokenIds: number[]): boolean {
   const tokens = Array.isArray(market.tokens) ? market.tokens.map(toNumber).filter(isNumber) : [];
   return hypeTokenIds.some((id) => tokens.includes(id));
@@ -198,6 +255,6 @@ function buildVenueFlow(trades: unknown[]) {
 export async function getDashboardData(): Promise<DashboardData> {
   const [candles, weeklyCandles, monthlyCandles] = await Promise.all([getHypeCandles24h(), getHypeCandles7d(), getHypeCandles30d()]);
   const hype = await getHypeMarket(candles, weeklyCandles);
-  const [twaps, orderFlow] = await Promise.all([getHypeTwaps(hype.price), getOrderFlow(hype.price, candles, monthlyCandles)]);
-  return { generatedAt: new Date().toISOString(), hype, twaps, orderFlow };
+  const [twaps, orderFlow, accountPerps] = await Promise.all([getHypeTwaps(hype.price), getOrderFlow(hype.price, candles, monthlyCandles), getAccountPerpWatch()]);
+  return { generatedAt: new Date().toISOString(), hype, twaps, orderFlow, accountPerps };
 }

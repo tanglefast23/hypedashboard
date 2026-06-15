@@ -46,6 +46,7 @@ export function Dashboard({ initialData }: Props) {
         <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Perps Filled Limit Buys / Sells" buys={data.orderFlow.perps.limitFills[flowFrame].buys} sells={data.orderFlow.perps.limitFills[flowFrame].sells} subtitle="Completed maker-side limit fills inferred from the HYPE perps tape." />
         <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Spot Filled Limit Buys / Sells" buys={data.orderFlow.spot.limitFills[flowFrame].buys} sells={data.orderFlow.spot.limitFills[flowFrame].sells} subtitle="Completed maker-side limit fills inferred from the HYPE/USDC spot tape." />
       </section>
+      <AccountPerpTwapPanel data={data} />
     </main>
   );
 }
@@ -194,11 +195,51 @@ function formatElapsed(timestamp: number): string {
   return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
 }
 
+function AccountPerpTwapPanel({ data }: { data: DashboardData }) {
+  const now = useSecondTicker();
+  const snapshotTime = Date.parse(data.generatedAt);
+  return (
+    <Card title="Watched Account Perp TWAPs" action={<span className="mono text-xs text-slate-500">{shortAddress(data.accountPerps.address)}</span>}>
+      {data.accountPerps.groups.length ? <div className="space-y-4">{data.accountPerps.groups.map((group) => <AccountPerpGroup group={group} key={group.coin} now={now} snapshotTime={snapshotTime} />)}</div> : <p className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-500">No open perp positions found for this address.</p>}
+    </Card>
+  );
+}
+
+function AccountPerpGroup({ group, now, snapshotTime }: { group: DashboardData["accountPerps"]["groups"][number]; now: number; snapshotTime: number }) {
+  const rows = group.rows.map((twap) => liveTwap(twap, now, snapshotTime));
+  const pressure = buildFilteredTwapPressure(rows);
+  return (
+    <section className="rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex items-center gap-2"><h3 className="text-lg font-semibold">{group.coin} Perp</h3><span className={`mono rounded-full border px-2 py-1 text-xs ${group.position.side === "LONG" ? "border-emerald-400/40 text-emerald-300" : "border-rose-400/40 text-rose-300"}`}>{group.position.side}</span></div>
+          <p className="mt-1 text-sm text-slate-400">Size {formatNumber(group.position.size)} · Value {formatCompactUsd(group.position.positionValue)} · PnL <span className={valueTone(group.position.unrealizedPnl)}>{signedUsd(group.position.unrealizedPnl ?? 0)}</span></p>
+        </div>
+        <div className="mono text-xs text-slate-500">Entry {group.position.entryPx ? formatUsd(group.position.entryPx, 4) : "—"} · Liq {group.position.liquidationPx ? formatUsd(group.position.liquidationPx, 4) : "—"}</div>
+      </div>
+      <div className="grid gap-5 lg:grid-cols-[minmax(220px,0.32fr)_minmax(0,0.68fr)]">
+        <div className="grid grid-cols-2 gap-3">
+          <TwapStat label="Next 5m" value={signedUsd(pressure.next5m)} tone={valueTone(pressure.next5m)} />
+          <TwapStat label="Next 15m" value={signedUsd(pressure.next15m)} tone={valueTone(pressure.next15m)} />
+          <TwapStat label="Next 1h" value={signedUsd(pressure.next1h)} tone={valueTone(pressure.next1h)} />
+          <TwapStat label="Next 24h" value={signedUsd(pressure.next24h)} tone={valueTone(pressure.next24h)} />
+        </div>
+        <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-950/30 p-4">
+          <div className="mb-3 flex items-center justify-between text-sm"><span className="text-slate-400">Active {group.coin} Perp TWAPs</span><span className="mono text-slate-500">{rows.length}</span></div>
+          <div className="max-h-52 space-y-3 overflow-y-auto pr-2">
+            {rows.length ? rows.map((twap) => <TwapRow key={twap.hash} twap={twap} />) : <p className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-500">No active {group.coin} perp TWAPs right now.</p>}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function HypeTwapPanel({ data }: { data: DashboardData }) {
   const [filter, setFilter] = useState<TwapFilter>("combined");
   const now = useSecondTicker();
   const snapshotTime = Date.parse(data.generatedAt);
-  const rows = filterTwapRows(data.twaps.rows, filter).map((twap) => liveTwap(twap, now, data.hype.price, snapshotTime));
+  const rows = filterTwapRows(data.twaps.rows, filter).map((twap) => liveTwap(twap, now, snapshotTime));
   const pressure = buildFilteredTwapPressure(rows);
   return (
     <Card title="TWAPs HYPE Buy Pressure" action={<TwapFilterPills active={filter} onFilter={setFilter} />}>
@@ -237,13 +278,12 @@ function useSecondTicker(): number {
   return now;
 }
 
-function liveTwap(twap: HypeTwap, now: number, price: number, snapshotTime: number): LiveTwap {
+function liveTwap(twap: HypeTwap, now: number, snapshotTime: number): LiveTwap {
   const durationMs = Math.max(1, twap.durationMs);
   const liveRemainingMs = Math.max(0, twap.endTime - now);
   const liveProgress = clamp((now - twap.startTime) / durationMs, 0, 1);
-  const liveValue = twap.amount * (price > 0 ? price : twap.value / Math.max(twap.amount, 1));
   const snapshotElapsedMs = Math.max(0, now - (Number.isFinite(snapshotTime) ? snapshotTime : now));
-  return { ...twap, liveProgress, liveRemainingMs, liveValue, snapshotElapsedMs };
+  return { ...twap, liveProgress, liveRemainingMs, liveValue: twap.value, snapshotElapsedMs };
 }
 
 function filterTwapRows(rows: HypeTwap[], filter: TwapFilter): HypeTwap[] {

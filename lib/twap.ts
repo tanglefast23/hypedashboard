@@ -10,7 +10,7 @@ export type HypeTwap = {
   remainingMs: number;
   side: "BUY" | "SELL";
   startTime: number;
-  token: "HYPE" | "HYPE-USD";
+  token: string;
   user: string;
   value: number;
 };
@@ -37,6 +37,11 @@ const twapRowSchema = z.object({
 });
 
 export function normalizeTwapRows(rawRows: unknown[], options: { hypeMarketIds: number[]; hypePrice: number; now: number }): HypeTwap[] {
+  const assetMap = Object.fromEntries(options.hypeMarketIds.map((id) => [id, { token: id >= 10000 ? "HYPE" : "HYPE-USD", price: options.hypePrice }]));
+  return normalizeAssetTwapRows(rawRows, { assetMap, now: options.now });
+}
+
+export function normalizeAssetTwapRows(rawRows: unknown[], options: { assetMap: Record<number, { token: string; price: number }>; now: number }): HypeTwap[] {
   return rawRows.map((row) => parseTwapRow(row, options)).filter(isHypeTwap).sort((a, b) => b.value - a.value);
 }
 
@@ -51,11 +56,12 @@ export function buildTwapPressure(rows: HypeTwap[], now: number): TwapPressure {
   };
 }
 
-function parseTwapRow(raw: unknown, options: { hypeMarketIds: number[]; hypePrice: number; now: number }): HypeTwap | null {
+function parseTwapRow(raw: unknown, options: { assetMap: Record<number, { token: string; price: number }>; now: number }): HypeTwap | null {
   const parsed = twapRowSchema.safeParse(raw);
   if (!parsed.success || parsed.data.ended || parsed.data.error) return null;
   const twap = parsed.data.action.twap;
-  if (!options.hypeMarketIds.includes(twap.a)) return null;
+  const asset = options.assetMap[twap.a];
+  if (!asset) return null;
   const amount = Number(twap.s);
   if (!Number.isFinite(amount)) return null;
   const durationMs = twap.m * 60 * 1000;
@@ -71,9 +77,9 @@ function parseTwapRow(raw: unknown, options: { hypeMarketIds: number[]; hypePric
     remainingMs: Math.max(0, endTime - options.now),
     side: twap.b ? "BUY" : "SELL",
     startTime: parsed.data.time,
-    token: twap.a >= 10000 ? "HYPE" : "HYPE-USD",
+    token: asset.token,
     user: parsed.data.user,
-    value: amount * options.hypePrice,
+    value: amount * asset.price,
   };
 }
 

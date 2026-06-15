@@ -29,7 +29,7 @@ export type HypeTwap = {
   remainingMs: number;
   side: "BUY" | "SELL";
   startTime: number;
-  token: "HYPE" | "HYPE-USD";
+  token: string;
   user: string;
   value: number;
 };
@@ -55,9 +55,33 @@ export type OrderFlowData = {
   spot: VenueOrderFlowData;
 };
 
+export type AccountPerpPosition = {
+  coin: string;
+  entryPx: number | null;
+  liquidationPx: number | null;
+  marginUsed: number | null;
+  positionValue: number;
+  returnOnEquity: number | null;
+  side: "LONG" | "SHORT";
+  size: number;
+  unrealizedPnl: number | null;
+};
+
+export type AccountPerpTwapGroup = {
+  coin: string;
+  position: AccountPerpPosition;
+  rows: HypeTwap[];
+};
+
+export type AccountPerpWatchData = {
+  address: string;
+  groups: AccountPerpTwapGroup[];
+};
+
 export type DashboardData = {
   generatedAt: string;
   hype: HypeMarket;
   twaps: HypeTwapData;
   orderFlow: OrderFlowData;
+  accountPerps: AccountPerpWatchData;
 };
