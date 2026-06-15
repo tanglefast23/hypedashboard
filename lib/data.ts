@@ -370,9 +370,24 @@ function emptyVenueFlow(): DashboardData["orderFlow"]["spot"] {
   };
 }
 
-async function getPerpOnlyOrderFlow(coin: string, price: number, candles: Candle[], monthlyCandles: Candle[]): Promise<DashboardData["orderFlow"]> {
-  const raw = await postHyperliquid({ type: "recentTrades", coin }).catch(() => []);
-  return { hourlyVolume: buildHourlyVolumeBars(candles, price), weeklyVolume: buildWeeklyVolumeBars(monthlyCandles), dailyVolume: buildDailyVolumeBars(monthlyCandles), perps: buildVenueFlow(z.array(z.unknown()).parse(raw)), spot: emptyVenueFlow() };
+async function getPerpAndSpotOrderFlow(coin: string, spotCoin: string | null, price: number, candles: Candle[], monthlyCandles: Candle[]): Promise<DashboardData["orderFlow"]> {
+  const [perpRaw, spotRaw] = await Promise.all([
+    postHyperliquid({ type: "recentTrades", coin }).catch(() => []),
+    spotCoin ? postHyperliquid({ type: "recentTrades", coin: spotCoin }).catch(() => []) : Promise.resolve([]),
+  ]);
+  return {
+    hourlyVolume: buildHourlyVolumeBars(candles, price),
+    weeklyVolume: buildWeeklyVolumeBars(monthlyCandles),
+    dailyVolume: buildDailyVolumeBars(monthlyCandles),
+    perps: buildVenueFlow(z.array(z.unknown()).parse(perpRaw)),
+    spot: spotCoin ? buildVenueFlow(z.array(z.unknown()).parse(spotRaw)) : emptyVenueFlow(),
+  };
+}
+
+function getSpotCoin(symbol: string): string | null {
+  if (symbol === "HYPE") return "@107";
+  if (symbol === "ZEC") return "@272";
+  return null;
 }
 
 async function getGenericCrowdingData(coin: string, market: DashboardData["hype"], orderFlow: DashboardData["orderFlow"], twaps: DashboardData["twaps"], rsi14: number | null): Promise<DashboardData["crowding"]> {
@@ -417,12 +432,13 @@ export async function getAssetDashboardData(symbol: string): Promise<DashboardDa
     coin === "HYPE" ? getHypeCandles30d() : getPerpCandles(coin, "1d", 30 * 24 * 60 * 60 * 1000),
   ]);
   const hype = coin === "HYPE" ? await getHypeMarket(candles, weeklyCandles) : await getAssetMarket(coin, candles, weeklyCandles);
+  const spotCoin = getSpotCoin(coin);
   const [twaps, orderFlow, accountPerps] = await Promise.all([
     coin === "HYPE" ? getHypeTwaps(hype.price) : getHoldingTwaps(coin, hype.price),
-    coin === "HYPE" ? getOrderFlow(hype.price, candles, monthlyCandles) : getPerpOnlyOrderFlow(coin, hype.price, candles, monthlyCandles),
+    coin === "HYPE" ? getOrderFlow(hype.price, candles, monthlyCandles) : getPerpAndSpotOrderFlow(coin, spotCoin, hype.price, candles, monthlyCandles),
     getAccountPerpWatch(),
   ]);
   const rsi14 = calculateRsi(weeklyCandles, hype.price);
   const crowding = coin === "HYPE" ? await getCrowdingData({ hypePrice: hype.price, orderFlow, priceChange1d: hype.changes["1d"], rsi14, twaps }) : await getGenericCrowdingData(coin, hype, orderFlow, twaps, rsi14);
-  return { generatedAt: new Date().toISOString(), asset: { symbol: coin, spotSymbol: coin === "HYPE" ? "@107" : null }, hype, twaps, orderFlow, accountPerps, crowding };
+  return { generatedAt: new Date().toISOString(), asset: { symbol: coin, spotSymbol: spotCoin }, hype, twaps, orderFlow, accountPerps, crowding };
 }

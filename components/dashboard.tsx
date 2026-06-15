@@ -45,7 +45,7 @@ export function Dashboard({ initialData }: Props) {
       <VolumeBarChart data={data} range={volumeRange} onRange={setVolumeRange} />
       <section className="grid gap-8 2xl:grid-cols-2">
         <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Perps Market Buys / Sells" buys={data.orderFlow.perps.marketTrades[flowFrame].buys} sells={data.orderFlow.perps.marketTrades[flowFrame].sells} subtitle={`Completed aggressive taker trades on ${data.asset.symbol} perps.`} />
-        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Spot Market Buys / Sells" buys={data.orderFlow.spot.marketTrades[flowFrame].buys} sells={data.orderFlow.spot.marketTrades[flowFrame].sells} subtitle={data.asset.spotSymbol ? `Completed aggressive taker trades on ${data.asset.symbol}/USDC spot.` : `${data.asset.symbol} spot tape is not available from the current Hyperliquid source.`} />
+        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Spot Market Buys / Sells" buys={data.orderFlow.spot.marketTrades[flowFrame].buys} sells={data.orderFlow.spot.marketTrades[flowFrame].sells} subtitle={data.asset.spotSymbol ? `Completed aggressive taker trades on ${spotDisplayPair(data.asset.symbol)}` : `${data.asset.symbol} spot tape is not available from the current Hyperliquid source.`} />
       </section>
     </main>
   );
@@ -460,6 +460,7 @@ function largestTradeValue(rows: MarketTrade[]): number { return rows.reduce((ma
 function signedUsd(value: number): string { return `${value >= 0 ? "+" : "-"}${formatCompactUsd(Math.abs(value))}`; }
 function clamp(value: number, min: number, max: number): number { return Math.min(max, Math.max(min, value)); }
 function shortAddress(address: string): string { return address.length > 18 ? `${address.slice(0, 8)}...${address.slice(-6)}` : address; }
+function spotDisplayPair(symbol: string): string { return symbol === "ZEC" ? "uZEC/USDC spot" : `${symbol}/USDC spot`; }
 function displayTwapUnit(token: string): string { return token.replace(/-USD$/, ""); }
 function formatDuration(ms: number): string {
   const totalSeconds = Math.max(0, Math.round(ms / 1_000));
