@@ -32,7 +32,6 @@ export function Dashboard({ initialData }: Props) {
   const data = status.data ?? initialData;
   const handleFlowFrame = (frame: FlowTimeframeId) => {
     setFlowFrame(frame);
-    void refresh(data.asset.symbol, setStatus);
   };
 
   return (
@@ -301,10 +300,10 @@ function OrderFlowCard({ buys, frame, onFrame, sells, subtitle, title }: { buys:
         <div className="min-w-0 flex-1">
           <h2 className="text-xl font-semibold">{title}</h2>
           <p className="mt-1 text-sm text-slate-400">{subtitle}</p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-            <FlowStat label="Net" value={signedUsd(netValue)} tone={valueTone(netValue)} />
-            <FlowStat label="Largest Buy" value={formatCompactUsd(largestBuy)} tone="text-emerald-300" />
-            <FlowStat label="Largest Sell" value={formatCompactUsd(largestSell)} tone="text-rose-300" />
+          <div className="mt-4 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+            <FlowStat label={`Net · ${flowFrameLabel(frame)}`} value={signedUsd(netValue)} tone={valueTone(netValue)} />
+            <FlowStat label={`Largest Buy · ${flowFrameLabel(frame)}`} value={formatCompactUsd(largestBuy)} tone="text-emerald-300" />
+            <FlowStat label={`Largest Sell · ${flowFrameLabel(frame)}`} value={formatCompactUsd(largestSell)} tone="text-rose-300" />
           </div>
         </div>
         <Pills active={frame} onFrame={onFrame} />
@@ -315,7 +314,11 @@ function OrderFlowCard({ buys, frame, onFrame, sells, subtitle, title }: { buys:
 }
 
 function FlowStat({ label, tone, value }: { label: string; tone: string; value: string }) {
-  return <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">{label}</p><p className={`mono mt-1 whitespace-nowrap text-2xl font-semibold leading-tight ${tone}`}>{value}</p></div>;
+  return <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><p className="text-[10px] uppercase tracking-[0.1em] text-slate-500">{label}</p><p className={`mono mt-1 whitespace-nowrap text-xl font-semibold leading-tight sm:text-2xl xl:text-2xl ${tone}`}>{value}</p></div>;
+}
+
+function flowFrameLabel(frame: FlowTimeframeId): string {
+  return FLOW_TIMEFRAMES.find((item) => item.id === frame)?.label ?? frame.toUpperCase();
 }
 
 function Pills({ active, onFrame }: { active: FlowTimeframeId; onFrame: (frame: FlowTimeframeId) => void }) {
