@@ -33,7 +33,8 @@ export async function getCurrentCrowdingData(input: { hypePrice: number; orderFl
   ]);
   const oiFundingScore = fundingCrowdingScore(venues);
   const liquidationScore = liquidation?.score ?? 0;
-  const oiChange24hPercent = coinalyzeOiChange ?? oiHistory.dayChangePercent ?? oiChangePercent(oiHistory.ranges.day);
+  const fallbackOiChange = oiHistory.daySourceCount >= 2 ? oiChangePercent(oiHistory.ranges.day) : null;
+  const oiChange24hPercent = coinalyzeOiChange ?? oiHistory.dayChangePercent ?? fallbackOiChange;
   const flowNetUsd = weightedFlowNetUsd(input.orderFlow);
   const oiPriceScore = oiPriceCrowdingScore(oiChange24hPercent, input.priceChange1d, weightedFunding(venues));
   const flowScore = flowCrowdingScore(input.orderFlow);
@@ -205,6 +206,7 @@ function weightedOiChangePercent(series: OiSeries[]): number | null {
     if (!first || !last) return [];
     return [{ change: ((last - first) / first) * 100, weight: first * row.weightBoost }];
   });
+  if (changes.length < 2) return null;
   const totalWeight = changes.reduce((sum, row) => sum + row.weight, 0);
   return totalWeight ? changes.reduce((sum, row) => sum + row.change * row.weight, 0) / totalWeight : null;
 }

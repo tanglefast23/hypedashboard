@@ -4,6 +4,8 @@ const LIQUIDATION_WINDOW_SECONDS = 60 * 60;
 const MAX_SYMBOLS = 20;
 
 let cachedHypeSymbols: { expiresAt: number; symbols: string[] } | null = null;
+let cachedLiquidation: { expiresAt: number; value: LiquidationImbalance | null } | null = null;
+let cachedOiChange: { expiresAt: number; value: number | null } | null = null;
 
 type FutureMarket = {
   base_asset?: string;
@@ -28,6 +30,7 @@ export type LiquidationImbalance = {
 };
 
 export async function getCoinalyzeOiChangePercent(): Promise<number | null> {
+  if (cachedOiChange && cachedOiChange.expiresAt > Date.now()) return cachedOiChange.value;
   const apiKey = process.env.COINALYZE_API_KEY;
   if (!apiKey) return null;
   const symbols = await getHypeSymbols(apiKey);
@@ -40,10 +43,13 @@ export async function getCoinalyzeOiChangePercent(): Promise<number | null> {
     symbols: symbols.slice(0, MAX_SYMBOLS).join(","),
     to: String(now),
   });
-  return weightedOpenInterestChange(histories);
+  const value = weightedOpenInterestChange(histories);
+  cachedOiChange = { expiresAt: Date.now() + 60 * 1000, value };
+  return value;
 }
 
 export async function getCoinalyzeLiquidationImbalance(): Promise<LiquidationImbalance | null> {
+  if (cachedLiquidation && cachedLiquidation.expiresAt > Date.now()) return cachedLiquidation.value;
   const apiKey = process.env.COINALYZE_API_KEY;
   if (!apiKey) return null;
   const symbols = await getHypeSymbols(apiKey);
@@ -58,7 +64,9 @@ export async function getCoinalyzeLiquidationImbalance(): Promise<LiquidationImb
   });
   const totals = sumLiquidations(histories);
   const total = totals.longLiquidationsUsd + totals.shortLiquidationsUsd;
-  return total ? { ...totals, imbalanceUsd: totals.longLiquidationsUsd - totals.shortLiquidationsUsd, score: ((totals.longLiquidationsUsd - totals.shortLiquidationsUsd) / total) * 100, sourceCount: histories.length } : null;
+  const value = total ? { ...totals, imbalanceUsd: totals.longLiquidationsUsd - totals.shortLiquidationsUsd, score: ((totals.longLiquidationsUsd - totals.shortLiquidationsUsd) / total) * 100, sourceCount: histories.length } : null;
+  cachedLiquidation = { expiresAt: Date.now() + 60 * 1000, value };
+  return value;
 }
 
 async function getHypeSymbols(apiKey: string): Promise<string[]> {
