@@ -16,6 +16,14 @@ export type MarketTrade = {
   value: number;
 };
 
+export type MarketFlow = {
+  buyUsd: number;
+  buys: MarketTrade[];
+  netUsd: number;
+  sellUsd: number;
+  sells: MarketTrade[];
+};
+
 export type VolumeBar = {
   label: string;
   volume: number;
@@ -48,11 +56,18 @@ export function normalizeL2Book(raw: unknown, fallbackPrice: number): { buys: Li
   return { buys: levels[0].slice(0, 15).map((level) => parseLevel(level, fallbackPrice)), sells: levels[1].slice(0, 15).map((level) => parseLevel(level, fallbackPrice)) };
 }
 
-export function buildMarketFlow(rawTrades: unknown[], windowMs: number, now: number): { buys: MarketTrade[]; sells: MarketTrade[] } {
+export function buildMarketFlow(rawTrades: unknown[], windowMs: number, now: number): MarketFlow {
   const trades = parseWindowTrades(rawTrades, windowMs, now);
+  const buys = trades.filter((trade) => trade.side === "B");
+  const sells = trades.filter((trade) => trade.side === "A");
+  const buyUsd = sumValue(buys);
+  const sellUsd = sumValue(sells);
   return {
-    buys: topValueTrades(trades.filter((trade) => trade.side === "B")),
-    sells: topValueTrades(trades.filter((trade) => trade.side === "A")),
+    buyUsd,
+    buys: topValueTrades(buys),
+    netUsd: buyUsd - sellUsd,
+    sellUsd,
+    sells: topValueTrades(sells),
   };
 }
 
@@ -67,6 +82,8 @@ export function buildLimitFillFlow(rawTrades: unknown[], windowMs: number, now: 
 function topValueTrades(trades: (MarketTrade & { side: "A" | "B" })[]): MarketTrade[] {
   return [...trades].sort((a, b) => b.value - a.value).slice(0, 50).map(stripSide);
 }
+
+function sumValue(trades: MarketTrade[]): number { return trades.reduce((sum, trade) => sum + trade.value, 0); }
 
 function parseWindowTrades(rawTrades: unknown[], windowMs: number, now: number): (MarketTrade & { side: "A" | "B" })[] {
   return rawTrades.map(parseTrade).filter(isMarketTrade).filter((trade) => now - trade.time <= windowMs);

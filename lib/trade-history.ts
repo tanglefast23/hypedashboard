@@ -54,13 +54,25 @@ async function getFrameTrades(config: SupabaseConfig, venue: Venue, durationMs: 
 }
 
 async function queryFrameSide(config: SupabaseConfig, venue: Venue, side: TradeSide, since: string): Promise<StoredTrade[]> {
+  const rows: StoredTrade[] = [];
+  const pageSize = 1000;
+  for (let offset = 0; offset < 10_000; offset += pageSize) {
+    const page = await queryFrameSidePage(config, venue, side, since, pageSize, offset);
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+  return rows;
+}
+
+async function queryFrameSidePage(config: SupabaseConfig, venue: Venue, side: TradeSide, since: string, limit: number, offset: number): Promise<StoredTrade[]> {
   const params = new URLSearchParams({
     select: "side,price,size,value_usd,trade_time",
     venue: `eq.${venue}`,
     side: `eq.${side}`,
     trade_time: `gte.${since}`,
-    order: "value_usd.desc",
-    limit: "50",
+    order: "trade_time.desc",
+    limit: String(limit),
+    offset: String(offset),
   });
   const response = await supabaseFetch(config, `${TRADE_TABLE}?${params}`);
   if (!response.ok) throw new Error(`Supabase ${venue} ${side} query failed: ${response.status}`);

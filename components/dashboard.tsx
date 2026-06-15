@@ -10,7 +10,7 @@ type SortState = { key: SortKey; direction: SortDirection } | null;
 type VolumeRange = "day" | "week" | "month";
 type TwapFilter = "spot" | "perps" | "combined";
 type LiveTwap = HypeTwap & { liveProgress: number; liveRemainingMs: number; liveValue: number; snapshotElapsedMs: number };
-import { FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, PERFORMANCE_TIMEFRAMES, type FlowTimeframeId, type HeaderTimeframeId, type MarketTrade } from "../lib/order-flow";
+import { FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, PERFORMANCE_TIMEFRAMES, type FlowTimeframeId, type HeaderTimeframeId, type MarketFlow, type MarketTrade } from "../lib/order-flow";
 import { formatCompactUsd, formatCompactUsdOneDecimal, formatNumber, formatPercent, formatUsd } from "../lib/format";
 import type { DashboardData, HypeTwap } from "../lib/types";
 
@@ -43,8 +43,8 @@ export function Dashboard({ initialData }: Props) {
       <HypeTwapPanel data={data} />
       <VolumeBarChart data={data} range={volumeRange} onRange={setVolumeRange} />
       <section className="grid gap-6 xl:grid-cols-2">
-        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Perps Market Buys / Sells" buys={data.orderFlow.perps.marketTrades[flowFrame].buys} sells={data.orderFlow.perps.marketTrades[flowFrame].sells} subtitle={`Completed aggressive taker trades on ${data.asset.symbol} perps.`} />
-        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Spot Market Buys / Sells" buys={data.orderFlow.spot.marketTrades[flowFrame].buys} sells={data.orderFlow.spot.marketTrades[flowFrame].sells} subtitle={data.asset.spotSymbol ? `Completed aggressive taker trades on ${spotDisplayPair(data.asset.symbol)}` : `${data.asset.symbol} spot tape is not available from the current Hyperliquid source.`} />
+        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Perps Market Buys / Sells" flow={data.orderFlow.perps.marketTrades[flowFrame]} subtitle={`Completed aggressive taker trades on ${data.asset.symbol} perps.`} />
+        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Spot Market Buys / Sells" flow={data.orderFlow.spot.marketTrades[flowFrame]} subtitle={data.asset.spotSymbol ? `Completed aggressive taker trades on ${spotDisplayPair(data.asset.symbol)}` : `${data.asset.symbol} spot tape is not available from the current Hyperliquid source.`} />
       </section>
     </main>
   );
@@ -290,8 +290,9 @@ function VolumeRangePills({ active, onRange }: { active: VolumeRange; onRange: (
   return <div className="flex gap-2"><button className={pillClass(active === "day")} onClick={() => onRange("day")}>Day</button><button className={pillClass(active === "week")} onClick={() => onRange("week")}>Week</button><button className={pillClass(active === "month")} onClick={() => onRange("month")}>Month</button></div>;
 }
 
-function OrderFlowCard({ buys, frame, onFrame, sells, subtitle, title }: { buys: MarketTrade[]; frame: FlowTimeframeId; onFrame: (frame: FlowTimeframeId) => void; sells: MarketTrade[]; subtitle: string; title: string }) {
-  const netValue = sumTradeValue(buys) - sumTradeValue(sells);
+function OrderFlowCard({ flow, frame, onFrame, subtitle, title }: { flow: MarketFlow; frame: FlowTimeframeId; onFrame: (frame: FlowTimeframeId) => void; subtitle: string; title: string }) {
+  const { buys, sells } = flow;
+  const netValue = flow.netUsd;
   const largestBuy = largestTradeValue(buys);
   const largestSell = largestTradeValue(sells);
   return (
@@ -463,7 +464,6 @@ function TwapStat({ label, tone, value }: { label: string; tone: string; value: 
   return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><p className="text-xs text-slate-500">{label}</p><p className={`mono mt-1 text-2xl font-semibold transition-colors duration-300 ${tone}`}>{value}</p></div>;
 }
 
-function sumTradeValue(rows: MarketTrade[]): number { return rows.reduce((sum, row) => sum + row.value, 0); }
 function largestTradeValue(rows: MarketTrade[]): number { return rows.reduce((max, row) => Math.max(max, row.value), 0); }
 function signedUsd(value: number): string { return `${value >= 0 ? "+" : "-"}${formatCompactUsd(Math.abs(value))}`; }
 function clamp(value: number, min: number, max: number): number { return Math.min(max, Math.max(min, value)); }
