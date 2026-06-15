@@ -2,6 +2,7 @@ import { z } from "zod";
 import { buildDailyVolumeBars, buildHourlyVolumeBars, buildLimitFillFlow, buildMarketFlow, buildWeeklyVolumeBars, FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, PERFORMANCE_TIMEFRAMES } from "./order-flow";
 import type { HeaderTimeframeId, TimeframeId } from "./order-flow";
 import { getCrowdingData } from "./crowding";
+import { getStoredCrowdingBars } from "./crowding-history";
 import { getCoinalyzeLiquidationImbalance, getCoinalyzeOiChangePercent } from "./coinalyze";
 import { calculatePriceChangePercent } from "./price-change";
 import { collectHypeTrades, getStoredVenueFlows } from "./trade-history";
@@ -432,7 +433,9 @@ async function getGenericCrowdingData(coin: string, market: DashboardData["hype"
   const oiPriceScore = genericOiPriceCrowdingScore(oiChange24hPercent, market.changes["1d"], funding);
   const liquidationScore = liquidation?.score ?? 0;
   const score = Math.round(Math.max(-100, Math.min(100, 0.35 * fundingScore + 0.25 * liquidationScore + 0.2 * oiPriceScore + 0.15 * flowScore + 0.05 * twapScore)));
-  return { bars: neutralCrowdingBars(oiUsd, score), breakdown: { flow: Math.round(flowScore), fundingOi: Math.round(fundingScore), liquidation: Math.round(liquidationScore), oiPrice: Math.round(oiPriceScore), twap: Math.round(twapScore) }, generatedAt: new Date().toISOString(), label: score > 50 ? "Crowded Long" : score > 20 ? "Long-Leaning" : score < -50 ? "Crowded Short" : score < -20 ? "Short-Leaning" : "Balanced", metrics: { flowNetUsd, liquidationImbalanceUsd: liquidation?.imbalanceUsd ?? null, oiChange24hPercent, priceChange24hPercent: market.changes["1d"], rsi14, rsiModifier: 1, twapPressure1hUsd: twaps.pressure.next1h, weightedFunding: funding }, score, sources: oiUsd ? [{ funding, name: "Hyperliquid", oiUsd, source: "official" }] : [], summary: "Perp positioning uses Hyperliquid-native funding, taker flow, TWAP pressure, and current OI for this market.", totalOiUsd: oiUsd };
+  const current: DashboardData["crowding"] = { bars: neutralCrowdingBars(oiUsd, score), breakdown: { flow: Math.round(flowScore), fundingOi: Math.round(fundingScore), liquidation: Math.round(liquidationScore), oiPrice: Math.round(oiPriceScore), twap: Math.round(twapScore) }, generatedAt: new Date().toISOString(), label: score > 50 ? "Crowded Long" : score > 20 ? "Long-Leaning" : score < -50 ? "Crowded Short" : score < -20 ? "Short-Leaning" : "Balanced", metrics: { flowNetUsd, liquidationImbalanceUsd: liquidation?.imbalanceUsd ?? null, oiChange24hPercent, priceChange24hPercent: market.changes["1d"], rsi14, rsiModifier: 1, twapPressure1hUsd: twaps.pressure.next1h, weightedFunding: funding }, score, sources: oiUsd ? [{ funding, name: "Hyperliquid", oiUsd, source: "official" }] : [], summary: "Perp positioning uses Hyperliquid-native funding, taker flow, TWAP pressure, and current OI for this market.", totalOiUsd: oiUsd };
+  const storedBars = await getStoredCrowdingBars(coin).catch(() => null);
+  return storedBars ? { ...current, bars: { ...current.bars, ...storedBars } } : current;
 }
 
 function genericOiPriceCrowdingScore(oiChange24hPercent: number | null, priceChange1d: number | null, funding: number | null): number {

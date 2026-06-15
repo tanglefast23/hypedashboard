@@ -1,5 +1,6 @@
 create table if not exists public.hype_dashboard_crowding_snapshots (
   id bigserial primary key,
+  asset text not null default 'HYPE',
   snapshot_time timestamptz not null default now(),
   score integer not null,
   label text not null,
@@ -22,6 +23,9 @@ create table if not exists public.hype_dashboard_crowding_snapshots (
 
 create index if not exists hype_dashboard_crowding_snapshots_time_idx
   on public.hype_dashboard_crowding_snapshots (snapshot_time desc);
+
+create index if not exists hype_dashboard_crowding_snapshots_asset_time_idx
+  on public.hype_dashboard_crowding_snapshots (asset, snapshot_time desc);
 
 alter table public.hype_dashboard_crowding_snapshots enable row level security;
 

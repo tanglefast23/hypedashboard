@@ -12,11 +12,11 @@ type SupabaseConfig = { key: string; url: string };
 type RangeId = keyof typeof RANGE_BUCKETS;
 type SnapshotRow = { score: number; snapshot_time: string; total_oi_usd: number };
 
-export async function saveCrowdingSnapshot(crowding: CrowdingData): Promise<{ ok: boolean; reason?: string }> {
+export async function saveCrowdingSnapshot(crowding: CrowdingData, asset = "HYPE"): Promise<{ ok: boolean; reason?: string }> {
   const config = getSupabaseConfig();
   if (!config) return { ok: false, reason: "Supabase server env missing" };
   const response = await supabaseFetch(config, SNAPSHOT_TABLE, {
-    body: JSON.stringify(toSnapshotRow(crowding)),
+    body: JSON.stringify(toSnapshotRow(crowding, asset)),
     headers: { Prefer: "return=minimal" },
     method: "POST",
   });
@@ -25,12 +25,13 @@ export async function saveCrowdingSnapshot(crowding: CrowdingData): Promise<{ ok
   return { ok: true };
 }
 
-export async function getStoredCrowdingBars(): Promise<Partial<Record<RangeId, CrowdingBar[]>> | null> {
+export async function getStoredCrowdingBars(asset = "HYPE"): Promise<Partial<Record<RangeId, CrowdingBar[]>> | null> {
   const config = getSupabaseConfig();
   if (!config) return null;
   const since = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
   const params = new URLSearchParams({
     select: "snapshot_time,score,total_oi_usd",
+    asset: `eq.${normalizeAsset(asset)}`,
     snapshot_time: `gte.${since}`,
     order: "snapshot_time.asc",
     limit: "5000",
@@ -46,8 +47,9 @@ export async function getStoredCrowdingBars(): Promise<Partial<Record<RangeId, C
   return Object.keys(bars).length ? bars : null;
 }
 
-function toSnapshotRow(crowding: CrowdingData): Record<string, unknown> {
+function toSnapshotRow(crowding: CrowdingData, asset: string): Record<string, unknown> {
   return {
+    asset: normalizeAsset(asset),
     flow_net_usd: crowding.metrics.flowNetUsd,
     flow_score: crowding.breakdown.flow,
     funding_oi_score: crowding.breakdown.fundingOi,
@@ -113,6 +115,7 @@ function parseSnapshotRow(row: Record<string, unknown>): SnapshotRow | null {
     : null;
 }
 
+function normalizeAsset(asset: string): string { return asset.toUpperCase(); }
 function floorTime(time: number, bucketMs: number): number { return Math.floor(time / bucketMs) * bucketMs; }
 function avg(values: number[]): number { return values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1); }
 function formatBarLabel(time: number, mode: "hour" | "day"): string {
