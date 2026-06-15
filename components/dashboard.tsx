@@ -423,9 +423,11 @@ function liveTwap(twap: HypeTwap, now: number, snapshotTime: number): LiveTwap {
 
 function filterTwapRows(rows: HypeTwap[], filter: TwapFilter, symbol: string): HypeTwap[] {
   if (filter === "combined") return rows;
-  if (filter === "spot") return rows.filter((row) => row.token === symbol);
-  return rows.filter((row) => row.token === `${symbol}-USD` || (symbol !== "HYPE" && row.token === symbol));
+  if (filter === "spot") return rows.filter((row) => row.token === spotTwapToken(symbol));
+  return rows.filter((row) => row.token === `${symbol}-USD`);
 }
+
+function spotTwapToken(symbol: string): string { return symbol === "ZEC" ? "uZEC" : symbol; }
 
 function buildFilteredTwapPressure(rows: LiveTwap[]) {
   return {

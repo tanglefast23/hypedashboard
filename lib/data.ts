@@ -276,19 +276,21 @@ function dexForCoin(coin: string): string | undefined { return coin.includes(":"
 
 async function getHoldingTwaps(coin: string, price: number): Promise<HoldingDashboardData["twaps"]> {
   return cached(`holding-twaps-${coin}-v2`, 30_000, async () => {
-    const [rawRowsResult, assetResult, userHistoryResult, userFillsResult] = await Promise.allSettled([
+    const [rawRowsResult, assetResult, spotAssetResult, userHistoryResult, userFillsResult] = await Promise.allSettled([
       getJson(HYPURRSCAN_TWAPS_URL),
       getPerpAssetIndex(coin),
+      getSpotTwapAssetIndex(coin),
       postHyperliquid({ type: "twapHistory", user: WATCHED_PERP_ADDRESS }),
       postHyperliquid({ type: "userTwapSliceFills", user: WATCHED_PERP_ADDRESS }),
     ]);
     const now = Date.now();
     const rawRows = rawRowsResult.status === "fulfilled" ? z.array(z.unknown()).parse(rawRowsResult.value) : [];
     const asset = assetResult.status === "fulfilled" ? assetResult.value : null;
+    const spotAsset = spotAssetResult.status === "fulfilled" ? spotAssetResult.value : null;
     const userHistory = userHistoryResult.status === "fulfilled" ? z.array(z.unknown()).parse(userHistoryResult.value) : [];
     const userFills = userFillsResult.status === "fulfilled" ? z.array(z.unknown()).parse(userFillsResult.value) : [];
     const executedSizeById = aggregateUserTwapExecutedSizes(userFills, coin);
-    const publicRows = asset === null ? [] : normalizeAssetTwapRows(rawRows, { assetMap: { [asset]: { token: coin, price } }, now });
+    const publicRows = normalizeAssetTwapRows(rawRows, { assetMap: buildHoldingTwapAssetMap(coin, price, asset, spotAsset), now });
     const userRows = normalizeUserTwapHistory(userHistory, { coin, executedSizeById, now, price });
     const rows = dedupeTwaps([...userRows, ...publicRows]);
     return { pressure: buildTwapPressure(rows, now), rows };
@@ -304,6 +306,24 @@ async function getPerpAssetIndex(coin: string): Promise<number | null> {
     return dex ? 110000 + localIndex : localIndex;
   });
 }
+
+async function getSpotTwapAssetIndex(coin: string): Promise<number | null> {
+  return cached(`spot-twap-asset-${coin}-v1`, 1_800_000, async () => {
+    const spotCoin = getSpotCoin(coin);
+    if (!spotCoin?.startsWith("@")) return null;
+    const index = Number(spotCoin.slice(1));
+    return Number.isFinite(index) ? 10_000 + index : null;
+  });
+}
+
+function buildHoldingTwapAssetMap(coin: string, price: number, perpAsset: number | null, spotAsset: number | null): Record<number, { token: string; price: number }> {
+  return Object.fromEntries([
+    ...(perpAsset === null ? [] : [[perpAsset, { token: `${coin}-USD`, price }] as const]),
+    ...(spotAsset === null ? [] : [[spotAsset, { token: spotTwapToken(coin), price }] as const]),
+  ]);
+}
+
+function spotTwapToken(coin: string): string { return coin === "ZEC" ? "uZEC" : coin; }
 
 async function getPerpCandles(coin: string, interval: string, durationMs: number): Promise<Candle[]> {
   return cached(`candles-${coin}-${interval}-${durationMs}`, interval === "1m" ? 30_000 : 300_000, async () => {
