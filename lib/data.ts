@@ -210,9 +210,10 @@ function parseAccountPosition(row: Record<string, unknown>, dex: string): Dashbo
 
 function buildPerpAssetMap(positions: DashboardData["accountPerps"]["groups"][number]["position"][], universe: Record<string, unknown>[], mids: Record<string, string>) {
   return Object.fromEntries(positions.flatMap((position): [number, { token: string; price: number }][] => {
-    const asset = universe.findIndex((market) => market.name === position.coin);
+    const localAsset = universe.findIndex((market) => market.name === position.coin);
+    const asset = position.dex ? 110000 + localAsset : localAsset;
     const price = toNumber(mids[position.coin]) ?? position.positionValue / Math.max(position.size, 1);
-    return asset >= 0 && price ? [[asset, { token: position.coin, price }]] : [];
+    return localAsset >= 0 && price ? [[asset, { token: position.coin, price }]] : [];
   }));
 }
 
@@ -293,11 +294,12 @@ async function getHoldingTwaps(coin: string, price: number): Promise<HoldingDash
 }
 
 async function getPerpAssetIndex(coin: string): Promise<number | null> {
-  return cached(`perp-asset-${coin}`, 1_800_000, async () => {
+  return cached(`perp-asset-${coin}-v2`, 1_800_000, async () => {
     const dex = dexForCoin(coin);
     const rawMeta = await postHyperliquid({ type: "meta", ...(dex ? { dex } : {}) });
-    const index = parseUniverse(rawMeta).findIndex((market) => market.name === coin);
-    return index >= 0 ? index : null;
+    const localIndex = parseUniverse(rawMeta).findIndex((market) => market.name === coin);
+    if (localIndex < 0) return null;
+    return dex ? 110000 + localIndex : localIndex;
   });
 }
 
@@ -310,8 +312,13 @@ async function getPerpCandles(coin: string, interval: string, durationMs: number
   });
 }
 
-function dedupeTwaps<T extends { hash: string; value: number }>(rows: T[]): T[] {
-  return [...new Map(rows.map((row) => [row.hash, row])).values()].sort((a, b) => b.value - a.value);
+function dedupeTwaps<T extends { hash: string; side: string; startTime: number; token: string; user: string; value: number }>(rows: T[]): T[] {
+  const byOrder = new Map<string, T>();
+  for (const row of rows) {
+    const key = `${row.user.toLowerCase()}-${row.token}-${row.side}-${row.startTime}`;
+    if (!byOrder.has(key)) byOrder.set(key, row);
+  }
+  return [...byOrder.values()].sort((a, b) => b.value - a.value);
 }
 
 export async function getHoldingDashboardData(coin: string): Promise<HoldingDashboardData> {
