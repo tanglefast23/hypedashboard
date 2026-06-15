@@ -12,6 +12,8 @@ type VenueSnapshot = {
 };
 
 type OiPoint = { time: number; value: number };
+type OiHistory = { dayChangePercent: number | null; daySourceCount: number; ranges: Record<CrowdingRange, OiPoint[]> };
+type OiSeries = { name: string; points: OiPoint[]; weightBoost: number };
 
 const HYPERLIQUID_INFO_URLS = ["https://api.hyperliquid.xyz/info", "https://api-ui.hyperliquid.xyz/info"];
 const PRICE_FALLBACK = 1;
@@ -30,14 +32,14 @@ export async function getCurrentCrowdingData(input: { hypePrice: number; orderFl
   ]);
   const oiFundingScore = fundingCrowdingScore(venues);
   const liquidationScore = liquidation?.score ?? 0;
-  const oiChange24hPercent = oiChangePercent(oiHistory.day);
+  const oiChange24hPercent = oiHistory.dayChangePercent ?? oiChangePercent(oiHistory.ranges.day);
   const flowNetUsd = weightedFlowNetUsd(input.orderFlow);
-  const oiPriceScore = oiPriceCrowdingScore(oiHistory, input.priceChange1d, weightedFunding(venues));
+  const oiPriceScore = oiPriceCrowdingScore(oiChange24hPercent, input.priceChange1d, weightedFunding(venues));
   const flowScore = flowCrowdingScore(input.orderFlow);
   const twapScore = twapCrowdingScore(input.twaps, input.hypePrice, input.orderFlow);
   const score = clampScore(0.35 * oiFundingScore + 0.25 * liquidationScore + 0.2 * oiPriceScore + 0.15 * flowScore + 0.05 * twapScore);
   return {
-    bars: buildCrowdingBars(oiHistory, score),
+    bars: buildCrowdingBars(oiHistory.ranges, score),
     breakdown: { flow: Math.round(flowScore), fundingOi: Math.round(oiFundingScore), liquidation: Math.round(liquidationScore), oiPrice: Math.round(oiPriceScore), twap: Math.round(twapScore) },
     generatedAt: new Date().toISOString(),
     label: crowdingLabel(score),
@@ -143,16 +145,25 @@ async function getBybitFunding(): Promise<number | null> {
   return numOrNull(row?.fundingRate);
 }
 
-async function getOiHistory(hypePrice: number): Promise<Record<CrowdingRange, OiPoint[]>> {
-  const [day, week, month] = await Promise.all([getCombinedOiBars("day", hypePrice), getCombinedOiBars("week", hypePrice), getCombinedOiBars("month", hypePrice)]);
-  return { day, week, month };
+async function getOiHistory(hypePrice: number): Promise<OiHistory> {
+  const [daySeries, week, month] = await Promise.all([getOiSeries("day", hypePrice), getCombinedOiBars("week", hypePrice), getCombinedOiBars("month", hypePrice)]);
+  const day = mergeOiBars(daySeries.map((series) => series.points), 24);
+  return { dayChangePercent: weightedOiChangePercent(daySeries), daySourceCount: daySeries.length, ranges: { day, week, month } };
 }
 
 async function getCombinedOiBars(range: CrowdingRange, hypePrice: number): Promise<OiPoint[]> {
   const count = range === "day" ? 24 : range === "week" ? 7 : 30;
-  const [binance, bybit, okx] = await Promise.allSettled([getBinanceOiBars(range), getBybitOiBars(range, hypePrice), getOkxOiBars(range)]);
-  const series = [binance, bybit, okx].flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
-  return mergeOiBars(series, count);
+  const series = await getOiSeries(range, hypePrice);
+  return mergeOiBars(series.map((row) => row.points), count);
+}
+
+async function getOiSeries(range: CrowdingRange, hypePrice: number): Promise<OiSeries[]> {
+  const results = await Promise.allSettled([
+    getBinanceOiBars(range).then((points) => ({ name: "Binance", points, weightBoost: 1.2 })),
+    getBybitOiBars(range, hypePrice).then((points) => ({ name: "Bybit", points, weightBoost: 1 })),
+    getOkxOiBars(range).then((points) => ({ name: "OKX", points, weightBoost: 1 })),
+  ]);
+  return results.flatMap((result) => result.status === "fulfilled" && result.value.points.length >= 2 ? [result.value] : []);
 }
 
 async function getBinanceOiBars(range: CrowdingRange): Promise<OiPoint[]> {
@@ -186,6 +197,17 @@ function mergeOiBars(series: OiPoint[][], count: number): OiPoint[] {
   })).filter((point) => point.time > 0 && point.value > 0);
 }
 
+function weightedOiChangePercent(series: OiSeries[]): number | null {
+  const changes = series.flatMap((row) => {
+    const first = row.points[0]?.value ?? 0;
+    const last = row.points.at(-1)?.value ?? 0;
+    if (!first || !last) return [];
+    return [{ change: ((last - first) / first) * 100, weight: first * row.weightBoost }];
+  });
+  const totalWeight = changes.reduce((sum, row) => sum + row.weight, 0);
+  return totalWeight ? changes.reduce((sum, row) => sum + row.change * row.weight, 0) / totalWeight : null;
+}
+
 function fundingCrowdingScore(venues: VenueSnapshot[]): number {
   const value = weightedFunding(venues);
   return value === null ? 0 : clampScore((value / 0.00015) * 100);
@@ -216,12 +238,9 @@ function flowNetUsd(flow: { buys: { value: number }[]; sells: { value: number }[
   return buy - sell;
 }
 
-function oiPriceCrowdingScore(history: Record<CrowdingRange, OiPoint[]>, priceChange1d: number | null, funding: number | null): number {
-  const bars = history.day;
-  if (bars.length < 2 || priceChange1d === null) return 0;
-  const first = bars[0].value;
-  const last = bars.at(-1)?.value ?? first;
-  const oiChange = first ? (last - first) / first : 0;
+function oiPriceCrowdingScore(oiChange24hPercent: number | null, priceChange1d: number | null, funding: number | null): number {
+  if (oiChange24hPercent === null || priceChange1d === null) return 0;
+  const oiChange = oiChange24hPercent / 100;
   if (oiChange <= 0) return 0;
   const fundingDirection = funding !== null && Math.abs(funding) >= 0.00002 ? Math.sign(funding) : 0;
   const direction = fundingDirection || (priceChange1d >= 0 ? 1 : -1);
