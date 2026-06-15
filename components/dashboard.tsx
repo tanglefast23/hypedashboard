@@ -202,16 +202,16 @@ function signedPercent(value: number | null): string {
 }
 
 function CrowdingBar({ bar, maxAbs }: { bar: DashboardData["crowding"]["bars"]["day"][number]; maxAbs: number }) {
-  const height = Math.max(3, Math.abs(bar.score) / maxAbs * 50);
+  const height = Math.max(3, Math.abs(bar.score) / maxAbs * 42);
   const isLongCrowded = bar.score >= 0;
-  const labelClass = `mono absolute left-1/2 -translate-x-1/2 text-[10px] font-semibold ${scoreToneForCrowding(bar.score)}`;
+  const labelClass = `mono absolute left-1/2 z-10 -translate-x-1/2 text-[10px] font-semibold ${scoreToneForCrowding(bar.score)}`;
+  const labelStyle = isLongCrowded ? { bottom: `calc(50% + ${height}% + 4px)` } : { top: `calc(50% + ${height}% + 4px)` };
   return (
     <div className="group flex h-full min-w-0 flex-1 flex-col items-center justify-center gap-2" title={`${bar.label} ${signedScore(bar.score)} · ${formatCompactUsdOneDecimal(bar.value)} OI`}>
-      <div className="relative flex h-44 w-full items-center pt-5 pb-5">
+      <div className="relative flex h-44 w-full items-center pt-6 pb-6">
         <div className="absolute left-0 right-0 top-1/2 h-px bg-slate-700/80" />
-        {isLongCrowded ? <span className={`${labelClass} bottom-[calc(50%+6px)]`}>{signedScore(bar.score)}</span> : null}
         <div className={isLongCrowded ? "absolute bottom-1/2 w-full rounded-t bg-amber-300/70 group-hover:bg-amber-200" : "absolute top-1/2 w-full rounded-b bg-cyan-300/70 group-hover:bg-cyan-200"} style={{ height: `${height}%` }} />
-        {!isLongCrowded ? <span className={`${labelClass} top-[calc(50%+6px)]`}>{signedScore(bar.score)}</span> : null}
+        <span className={labelClass} style={labelStyle}>{signedScore(bar.score)}</span>
       </div>
       <span className="mono hidden text-center text-[10px] text-slate-500 sm:block">{bar.label}</span>
     </div>
