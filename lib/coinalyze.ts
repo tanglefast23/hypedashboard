@@ -16,6 +16,8 @@ type FutureMarket = {
 
 type LiquidationPoint = { l?: number; s?: number; t?: number };
 type LiquidationHistory = { history?: LiquidationPoint[]; symbol?: string };
+type OpenInterestPoint = { c?: number; h?: number; l?: number; o?: number; t?: number };
+type OpenInterestHistory = { history?: OpenInterestPoint[]; symbol?: string };
 
 export type LiquidationImbalance = {
   longLiquidationsUsd: number;
@@ -24,6 +26,22 @@ export type LiquidationImbalance = {
   score: number;
   sourceCount: number;
 };
+
+export async function getCoinalyzeOiChangePercent(): Promise<number | null> {
+  const apiKey = process.env.COINALYZE_API_KEY;
+  if (!apiKey) return null;
+  const symbols = await getHypeSymbols(apiKey);
+  if (!symbols.length) return null;
+  const now = Math.floor(Date.now() / 1000);
+  const histories = await getCoinalyze<OpenInterestHistory[]>("/open-interest-history", apiKey, {
+    convert_to_usd: "true",
+    from: String(now - 24 * 60 * 60),
+    interval: "1hour",
+    symbols: symbols.slice(0, MAX_SYMBOLS).join(","),
+    to: String(now),
+  });
+  return weightedOpenInterestChange(histories);
+}
 
 export async function getCoinalyzeLiquidationImbalance(): Promise<LiquidationImbalance | null> {
   const apiKey = process.env.COINALYZE_API_KEY;
@@ -73,6 +91,22 @@ function sumLiquidations(histories: LiquidationHistory[]): Pick<LiquidationImbal
     }
     return totals;
   }, { longLiquidationsUsd: 0, shortLiquidationsUsd: 0 });
+}
+
+function weightedOpenInterestChange(histories: OpenInterestHistory[]): number | null {
+  const changes = histories.flatMap((row) => {
+    const points = row.history ?? [];
+    const first = Number(points[0]?.o ?? points[0]?.c);
+    const last = Number(points.at(-1)?.c ?? points.at(-1)?.o);
+    if (!Number.isFinite(first) || !Number.isFinite(last) || first <= 0 || last <= 0) return [];
+    return [{ change: ((last - first) / first) * 100, weight: first * oiSourceBoost(row.symbol) }];
+  });
+  const totalWeight = changes.reduce((sum, row) => sum + row.weight, 0);
+  return totalWeight ? changes.reduce((sum, row) => sum + row.change * row.weight, 0) / totalWeight : null;
+}
+
+function oiSourceBoost(symbol: string | undefined): number {
+  return symbol?.toUpperCase().includes("BINANCE") || symbol?.toUpperCase().endsWith(".A") ? 1.2 : 1;
 }
 
 async function getCoinalyze<T>(path: string, apiKey: string, params: Record<string, string>): Promise<T> {
