@@ -246,7 +246,7 @@ function VolumeBarChart({ data, onRange, range }: { data: DashboardData; onRange
   return (
     <section className="rounded-3xl border border-slate-700/50 bg-slate-950/60 p-5 shadow-2xl shadow-black/20 backdrop-blur">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-semibold">{data.asset.symbol} Volume</h2><p className="mt-1 text-sm text-slate-400">{subtitle}</p></div><VolumeRangePills active={range} onRange={onRange} /></div>
-      <div className="flex h-52 items-end gap-1 sm:gap-2">{projectedBars.map(({ bar, projection }, index) => <div className="group flex h-full min-w-0 flex-1 flex-col justify-end gap-2" key={`${bar.label}-${index}`}><div className="flex min-h-0 flex-1 items-end"><VolumeStack bar={bar.volumeUsd} max={max} projection={projection} label={bar.label} /></div><span className="mono hidden text-center text-[10px] text-slate-500 sm:block">{bar.label}</span></div>)}</div>
+      <div className="flex h-56 items-end gap-1 sm:gap-2">{projectedBars.map(({ bar, projection }, index) => <div className="group flex h-full min-w-0 flex-1 flex-col justify-end gap-2" key={`${bar.label}-${index}`}><div className="flex min-h-0 flex-1 items-end pt-6"><VolumeStack bar={bar.volumeUsd} max={max} projection={projection} label={bar.label} /></div><span className="mono hidden text-center text-[10px] text-slate-500 sm:block">{bar.label}</span></div>)}</div>
     </section>
   );
 }
@@ -266,9 +266,12 @@ function getVolumeSubtitle(range: VolumeRange): string {
 function VolumeStack({ bar, label, max, projection }: { bar: number; label: string; max: number; projection: number }) {
   const actualHeight = Math.max(4, (bar / max) * 100);
   const projectionHeight = projection > 0 ? Math.max(2, (projection / max) * 100) : 0;
+  const totalHeight = Math.min(100, actualHeight + projectionHeight);
+  const valueLabel = projection > 0 ? formatCompactUsdOneDecimal(bar + projection) : formatCompactUsdOneDecimal(bar);
   const title = projection > 0 ? `${label} ${formatCompactUsdOneDecimal(bar)} actual · ${formatCompactUsdOneDecimal(bar + projection)} projected` : `${label} ${formatCompactUsdOneDecimal(bar)}`;
   return (
-    <div className="flex h-full w-full flex-col justify-end" title={title}>
+    <div className="relative flex h-full w-full flex-col justify-end" title={title}>
+      <span className="mono pointer-events-none absolute left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap text-[9px] font-medium text-emerald-100/80 sm:block" style={{ bottom: `calc(${totalHeight}% + 4px)` }}>{valueLabel}</span>
       {projection > 0 ? <div className="w-full rounded-t border border-dashed border-emerald-100/60 bg-emerald-200/25 transition group-hover:bg-emerald-100/35" style={{ height: `${projectionHeight}%` }} /> : null}
       <div className={projection > 0 ? "w-full bg-emerald-300/70 transition group-hover:bg-emerald-200" : "w-full rounded-t bg-emerald-300/70 transition group-hover:bg-emerald-200"} style={{ height: `${actualHeight}%` }} />
     </div>
