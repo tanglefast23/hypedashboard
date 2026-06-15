@@ -22,6 +22,7 @@ export function Dashboard({ initialData }: Props) {
   const [status, setStatus] = useState<Status>({ data: initialData, error: null, loading: false });
   const [flowFrame, setFlowFrame] = useState<FlowTimeframeId>("5m");
   const [volumeRange, setVolumeRange] = useState<VolumeRange>("day");
+  const [crowdingRange, setCrowdingRange] = useState<VolumeRange>("day");
 
   useEffect(() => {
     const timer = window.setInterval(() => { void refresh(setStatus); }, 30_000);
@@ -39,6 +40,7 @@ export function Dashboard({ initialData }: Props) {
       <Header data={data} loading={status.loading} onRefresh={() => void refresh(setStatus)} />
       {status.error ? <ErrorBanner message={status.error} /> : null}
       <PerformanceGrid data={data} />
+      <CrowdingPanel data={data} range={crowdingRange} onRange={setCrowdingRange} />
       <HypeTwapPanel data={data} />
       <VolumeBarChart data={data} range={volumeRange} onRange={setVolumeRange} />
       <section className="grid gap-6 xl:grid-cols-2">
@@ -132,6 +134,64 @@ function PerformanceGrid({ data }: { data: DashboardData }) {
 function MetricTile({ label, tone, value }: { label: string; tone: string; value: string }) {
   return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4"><p className="text-xs uppercase tracking-[0.18em] text-slate-500">{label}</p><p className={`mono mt-2 text-xl font-semibold ${tone}`}>{value}</p></div>;
 }
+
+function CrowdingPanel({ data, onRange, range }: { data: DashboardData; onRange: (range: VolumeRange) => void; range: VolumeRange }) {
+  const crowding = data.crowding;
+  const bars = crowding.bars[range];
+  const maxAbs = Math.max(...bars.map((bar) => Math.abs(bar.score)), 20);
+  const scoreTone = crowding.score > 20 ? "text-amber-200" : crowding.score < -20 ? "text-cyan-200" : "text-slate-200";
+  const risk = crowding.score > 20 ? "Downside unwind risk" : crowding.score < -20 ? "Upside squeeze risk" : "No clear unwind side";
+  return (
+    <section className="grid gap-5 rounded-3xl border border-slate-700/50 bg-slate-950/60 p-5 shadow-2xl shadow-black/20 backdrop-blur lg:grid-cols-[minmax(240px,0.34fr)_minmax(0,0.66fr)]">
+      <div className="flex flex-col justify-between gap-5">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">HYPE Perp Crowding</p>
+          <div className="mt-3 flex items-end gap-3"><p className={`mono text-5xl font-semibold ${scoreTone}`}>{signedScore(crowding.score)}</p><p className="pb-2 text-lg font-semibold text-slate-100">{crowding.label}</p></div>
+          <p className="mt-2 text-sm text-slate-400">{risk}</p>
+          <p className="mt-3 text-sm leading-6 text-slate-300">{crowding.summary}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <CrowdingMini label="Combined OI" value={formatCompactUsd(crowding.totalOiUsd)} tone="text-slate-100" />
+          <CrowdingMini label="Venues" value={String(crowding.sources.length)} tone="text-slate-100" />
+          <CrowdingMini label="Funding/OI" value={signedScore(crowding.breakdown.fundingOi)} tone={scoreToneForCrowding(crowding.breakdown.fundingOi)} />
+          <CrowdingMini label="Flow" value={signedScore(crowding.breakdown.flow)} tone={scoreToneForCrowding(crowding.breakdown.flow)} />
+          <CrowdingMini label="OI/Price" value={signedScore(crowding.breakdown.oiPrice)} tone={scoreToneForCrowding(crowding.breakdown.oiPrice)} />
+          <CrowdingMini label="TWAP" value={signedScore(crowding.breakdown.twap)} tone={scoreToneForCrowding(crowding.breakdown.twap)} />
+        </div>
+      </div>
+      <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-semibold">Crowding History</h2><p className="mt-1 text-sm text-slate-400">Direct free APIs where history exists; current OI fills broader venue count.</p></div><VolumeRangePills active={range} onRange={onRange} /></div>
+        <div className="flex h-52 items-center gap-1 sm:gap-2">{bars.map((bar, index) => <CrowdingBar key={`${bar.label}-${index}`} bar={bar} maxAbs={maxAbs} />)}</div>
+      </div>
+    </section>
+  );
+}
+
+function CrowdingMini({ label, tone, value }: { label: string; tone: string; value: string }) {
+  return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{label}</p><p className={`mono mt-1 text-lg font-semibold ${tone}`}>{value}</p></div>;
+}
+
+function CrowdingBar({ bar, maxAbs }: { bar: DashboardData["crowding"]["bars"]["day"][number]; maxAbs: number }) {
+  const height = Math.max(3, Math.abs(bar.score) / maxAbs * 50);
+  const isLongCrowded = bar.score >= 0;
+  return (
+    <div className="group flex h-full min-w-0 flex-1 flex-col items-center justify-center gap-2" title={`${bar.label} ${signedScore(bar.score)} · ${formatCompactUsdOneDecimal(bar.value)} OI`}>
+      <div className="relative flex h-40 w-full items-center">
+        <div className="absolute left-0 right-0 top-1/2 h-px bg-slate-700/80" />
+        <div className={isLongCrowded ? "absolute bottom-1/2 w-full rounded-t bg-amber-300/70 group-hover:bg-amber-200" : "absolute top-1/2 w-full rounded-b bg-cyan-300/70 group-hover:bg-cyan-200"} style={{ height: `${height}%` }} />
+      </div>
+      <span className="mono hidden text-center text-[10px] text-slate-500 sm:block">{bar.label}</span>
+    </div>
+  );
+}
+
+function scoreToneForCrowding(value: number): string {
+  if (value >= 20) return "text-amber-200";
+  if (value <= -20) return "text-cyan-200";
+  return "text-slate-300";
+}
+
+function signedScore(value: number): string { return `${value > 0 ? "+" : ""}${Math.round(value)}`; }
 
 function VolumeBarChart({ data, onRange, range }: { data: DashboardData; onRange: (range: VolumeRange) => void; range: VolumeRange }) {
   const bars = getVolumeBars(data, range);

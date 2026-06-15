@@ -99,10 +99,38 @@ export type HoldingDashboardData = {
   holdings: AccountPerpWatchData;
 };
 
+export type CrowdingBar = {
+  label: string;
+  score: number;
+  value: number;
+};
+
+export type CrowdingData = {
+  bars: Record<"day" | "week" | "month", CrowdingBar[]>;
+  breakdown: {
+    flow: number;
+    fundingOi: number;
+    oiPrice: number;
+    twap: number;
+  };
+  generatedAt: string;
+  label: "Crowded Long" | "Long-Leaning" | "Balanced" | "Short-Leaning" | "Crowded Short";
+  score: number;
+  sources: {
+    funding: number | null;
+    name: string;
+    oiUsd: number;
+    source: string;
+  }[];
+  summary: string;
+  totalOiUsd: number;
+};
+
 export type DashboardData = {
   generatedAt: string;
   hype: HypeMarket;
   twaps: HypeTwapData;
   orderFlow: OrderFlowData;
   accountPerps: AccountPerpWatchData;
+  crowding: CrowdingData;
 };

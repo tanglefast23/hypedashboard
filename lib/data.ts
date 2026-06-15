@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { buildDailyVolumeBars, buildHourlyVolumeBars, buildLimitFillFlow, buildMarketFlow, buildWeeklyVolumeBars, FLOW_TIMEFRAMES, HEADER_TIMEFRAMES, PERFORMANCE_TIMEFRAMES } from "./order-flow";
 import type { HeaderTimeframeId, TimeframeId } from "./order-flow";
+import { getCrowdingData } from "./crowding";
 import { calculatePriceChangePercent } from "./price-change";
 import { collectHypeTrades, getStoredVenueFlows } from "./trade-history";
 import { aggregateUserTwapExecutedSizes, buildTwapPressure, normalizeAssetTwapRows, normalizeTwapRows, normalizeUserTwapHistory } from "./twap";
@@ -347,5 +348,6 @@ export async function getDashboardData(): Promise<DashboardData> {
   const [candles, weeklyCandles, monthlyCandles] = await Promise.all([getHypeCandles24h(), getHypeCandles7d(), getHypeCandles30d()]);
   const hype = await getHypeMarket(candles, weeklyCandles);
   const [twaps, orderFlow, accountPerps] = await Promise.all([getHypeTwaps(hype.price), getOrderFlow(hype.price, candles, monthlyCandles), getAccountPerpWatch()]);
-  return { generatedAt: new Date().toISOString(), hype, twaps, orderFlow, accountPerps };
+  const crowding = await getCrowdingData({ hypePrice: hype.price, orderFlow, priceChange1d: hype.changes["1d"], twaps });
+  return { generatedAt: new Date().toISOString(), hype, twaps, orderFlow, accountPerps, crowding };
 }
