@@ -90,12 +90,10 @@ function HoldingsMenu({ data }: { data: DashboardData }) {
       <div className="space-y-2">
         <Link className="block rounded-xl border border-emerald-400/30 bg-emerald-300/10 p-3 hover:border-emerald-300/70" href="/">
           <div className="flex items-center justify-between gap-3"><span className="font-semibold text-emerald-200">HOME</span><span className="mono text-xs text-emerald-300">HYPE</span></div>
-          <div className="mt-1 text-xs text-slate-400">Main HYPE dashboard</div>
         </Link>
         {holdings.length ? holdings.map((group) => (
           <Link className="block rounded-xl border border-slate-800 bg-slate-900/60 p-3 hover:border-emerald-400/50" href={`/holdings/${encodeURIComponent(group.coin)}`} key={group.coin}>
             <div className="flex items-center justify-between gap-3"><span className="font-semibold">{group.position.displayCoin}</span><span className={`mono text-xs ${group.position.side === "LONG" ? "text-emerald-300" : "text-rose-300"}`}>{group.position.side}</span></div>
-            <div className="mt-1 flex items-center justify-between text-xs text-slate-400"><span>{formatNumber(group.position.size)} {group.position.displayCoin}</span><span>{formatCompactUsd(group.position.positionValue)}</span></div>
           </Link>
         )) : <p className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-sm text-slate-500">No non-HYPE perp holdings found.</p>}
       </div>
