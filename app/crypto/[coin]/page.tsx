@@ -3,7 +3,7 @@ import { getAssetDashboardData } from "../../../lib/data";
 
 export const dynamic = "force-dynamic";
 
-const SUPPORTED = new Set(["NEAR", "ZEC", "SPCX", "SPX"]);
+const SUPPORTED = new Set(["NEAR", "ZEC", "SPCX"]);
 
 type Props = { params: Promise<{ coin: string }> };
 
