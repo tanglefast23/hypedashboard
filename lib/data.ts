@@ -275,6 +275,15 @@ function normalizePerpCoin(coin: string): string {
 
 function dexForCoin(coin: string): string | undefined { return coin.includes(":") ? coin.split(":")[0] : undefined; }
 
+async function resolvePerpMarketCoin(coin: string): Promise<string> {
+  if (coin.includes(":")) return coin;
+  const directAsset = await getPerpAssetIndex(coin).catch(() => null);
+  if (directAsset !== null) return coin;
+  const xyzCoin = `xyz:${coin}`;
+  const xyzAsset = await getPerpAssetIndex(xyzCoin).catch(() => null);
+  return xyzAsset !== null ? xyzCoin : coin;
+}
+
 async function getHoldingTwaps(displayCoin: string, marketCoin: string, price: number): Promise<HoldingDashboardData["twaps"]> {
   return cached(`holding-twaps-${displayCoin}-${marketCoin}-v2`, 30_000, async () => {
     const [rawRowsResult, assetResult, spotAssetResult, userHistoryResult, userFillsResult] = await Promise.allSettled([
@@ -339,20 +348,21 @@ function getMarketCoin(symbol: string): string { return symbol === "SPCX" ? "xyz
 
 export async function getHoldingDashboardData(coin: string): Promise<HoldingDashboardData> {
   const cleanCoin = normalizePerpCoin(coin);
+  const marketCoin = await resolvePerpMarketCoin(cleanCoin);
   const [candles, weeklyCandles, monthlyCandles, midsRaw, holdings] = await Promise.all([
-    getPerpCandles(cleanCoin, "1m", 24 * 60 * 60 * 1000),
-    getPerpCandles(cleanCoin, "1h", 7 * 24 * 60 * 60 * 1000),
-    getPerpCandles(cleanCoin, "1d", 30 * 24 * 60 * 60 * 1000),
-    postHyperliquid({ type: "allMids", ...(dexForCoin(cleanCoin) ? { dex: dexForCoin(cleanCoin) } : {}) }),
+    getPerpCandles(marketCoin, "1m", 24 * 60 * 60 * 1000),
+    getPerpCandles(marketCoin, "1h", 7 * 24 * 60 * 60 * 1000),
+    getPerpCandles(marketCoin, "1d", 30 * 24 * 60 * 60 * 1000),
+    postHyperliquid({ type: "allMids", ...(dexForCoin(marketCoin) ? { dex: dexForCoin(marketCoin) } : {}) }),
     getAccountPerpWatch(),
   ]);
   const mids = z.record(z.string()).parse(midsRaw);
-  const price = toNumber(mids[cleanCoin]) ?? monthlyCandles.at(-1)?.close ?? 0;
-  const twaps = await getHoldingTwaps(cleanCoin, cleanCoin, price);
+  const price = toNumber(mids[marketCoin]) ?? monthlyCandles.at(-1)?.close ?? 0;
+  const twaps = await getHoldingTwaps(cleanCoin, marketCoin, price);
   return {
     generatedAt: new Date().toISOString(),
     asset: { coin: cleanCoin, price, headerChanges: getHeaderChanges(price, weeklyCandles), changes: getPriceChanges(price, candles), volumes: getVolumes(candles, price) },
-    position: holdings.groups.find((group) => group.coin === cleanCoin)?.position ?? null,
+    position: holdings.groups.find((group) => group.coin === cleanCoin || group.coin === marketCoin)?.position ?? null,
     twaps,
     volume: { hourlyVolume: buildHourlyVolumeBars(candles, price), weeklyVolume: buildWeeklyVolumeBars(monthlyCandles), dailyVolume: buildDailyVolumeBars(monthlyCandles) },
     holdings,
