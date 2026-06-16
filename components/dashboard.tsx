@@ -19,7 +19,7 @@ type Status = { data: DashboardData | null; error: string | null; loading: boole
 type Props = { initialData: DashboardData };
 
 const FIRST_CLASS_DASHBOARDS = [
-  { href: "/", label: "HYPE", logo: "/logos/hype.jpg", logoClass: "h-full w-full scale-[0.85]", tone: "border-emerald-300/50 bg-emerald-300/10" },
+  { href: "/", label: "HYPE", logo: "/logos/hype.jpg", logoClass: "h-full w-full scale-[0.89]", tone: "border-emerald-300/50 bg-emerald-300/10" },
   { href: "/crypto/NEAR", label: "NEAR", logo: "/logos/near.jpg", logoClass: "h-full w-full scale-[1.01]", tone: "border-lime-300/50 bg-lime-300/10" },
   { href: "/crypto/ZEC", label: "ZEC", logo: "/logos/zec.png", logoClass: "h-full w-full scale-[0.92]", tone: "border-amber-300/50 bg-amber-300/10" },
   { href: "/crypto/SPCX", label: "SpaceX", logo: "/logos/spacex.svg", logoClass: "h-9 w-28 max-w-none translate-x-1 scale-[0.95]", tone: "border-sky-300/50 bg-sky-300/10" },
