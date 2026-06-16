@@ -58,9 +58,9 @@ function HoldingHeader({ data, loading, onRefresh }: { data: HoldingDashboardDat
     <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:gap-4"><h1 className="text-4xl font-semibold tracking-tight md:text-6xl">{displayCoin(data.asset.coin)}</h1><div className="flex flex-wrap items-baseline gap-x-3 gap-y-2"><p className="mono text-3xl font-semibold text-emerald-300 md:text-5xl">{formatUsd(data.asset.price, 4)}</p><HeaderChangePills changes={data.asset.headerChanges} /></div></div>
       <div className="relative flex flex-wrap justify-end gap-2 self-start md:self-auto">
+        <FirstClassDashboardButtons active={displayCoin(data.asset.coin)} />
         <button aria-label="Show watched holdings" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-700/80 bg-slate-900/60 text-slate-200 hover:bg-slate-800" onClick={() => setOpen((volumeUsd) => !volumeUsd)}><List className="h-4 w-4" /></button>
         <button aria-label="Refresh holding dashboard" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-700/80 bg-slate-900/60 text-slate-200 hover:bg-slate-800" onClick={onRefresh}><RefreshCcw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} /></button>
-        <FirstClassDashboardButtons active={displayCoin(data.asset.coin)} />
         {open ? <HoldingsMenu data={data} /> : null}
       </div>
     </header>
