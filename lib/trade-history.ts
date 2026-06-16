@@ -12,21 +12,40 @@ type RawTrade = { coin: string; px: string; side: TradeSide; sz: string; tid?: n
 type StoredTrade = { price: number; side: TradeSide; size: number; time: number; value: number };
 type VenueFlow = DashboardData["orderFlow"]["perps"];
 
+const DASHBOARD_TRADE_MARKETS = [
+  { asset: "HYPE", perp: "HYPE", spot: "@107" },
+  { asset: "NEAR", perp: "NEAR", spot: null },
+  { asset: "ZEC", perp: "ZEC", spot: "@272" },
+  { asset: "SPCX", perp: "xyz:SPCX", spot: null },
+] as const;
+
 export async function collectHypeTrades(): Promise<{ inserted: number; ok: boolean; reason?: string }> {
+  return collectDashboardTrades();
+}
+
+export async function collectDashboardTrades(): Promise<{ inserted: number; ok: boolean; reason?: string }> {
   const config = getSupabaseConfig();
   if (!config) return { inserted: 0, ok: false, reason: "Supabase server env missing" };
-  const [perpRaw, spotRaw] = await Promise.all([fetchRecentTrades("HYPE"), fetchRecentTrades("@107")]);
-  const rows = [...normalizeTrades(perpRaw, "perps", "HYPE"), ...normalizeTrades(spotRaw, "spot", "@107")];
+  const collected = await Promise.all(DASHBOARD_TRADE_MARKETS.map((market) => collectAssetTradeRows(market.asset, market.perp, market.spot)));
+  const rows = collected.flat();
   if (rows.length === 0) return { inserted: 0, ok: true };
   await upsertTrades(config, rows);
   await deleteOldTrades(config);
   return { inserted: rows.length, ok: true };
 }
 
-export async function getStoredVenueFlows(): Promise<{ perps: VenueFlow; spot: VenueFlow } | null> {
+async function collectAssetTradeRows(asset: string, perpCoin: string, spotCoin: string | null): Promise<Record<string, unknown>[]> {
+  const [perpRaw, spotRaw] = await Promise.all([
+    fetchRecentTrades(perpCoin).catch(() => []),
+    spotCoin ? fetchRecentTrades(spotCoin).catch(() => []) : Promise.resolve([]),
+  ]);
+  return [...normalizeTrades(perpRaw, "perps", asset, perpCoin), ...normalizeTrades(spotRaw, "spot", asset, spotCoin ?? asset)];
+}
+
+export async function getStoredVenueFlows(asset = "HYPE"): Promise<{ perps: VenueFlow; spot: VenueFlow } | null> {
   const config = getSupabaseConfig();
   if (!config) return null;
-  const [perps, spot] = await Promise.all([buildStoredVenueFlow(config, "perps"), buildStoredVenueFlow(config, "spot")]);
+  const [perps, spot] = await Promise.all([buildStoredVenueFlow(config, asset, "perps"), buildStoredVenueFlow(config, asset, "spot")]);
   if (!hasAnyTrades(perps) && !hasAnyTrades(spot)) return null;
   return { perps, spot };
 }
@@ -37,42 +56,43 @@ function getSupabaseConfig(): SupabaseConfig | null {
   return url && key ? { url: url.replace(/\/$/, ""), key } : null;
 }
 
-async function buildStoredVenueFlow(config: SupabaseConfig, venue: Venue): Promise<VenueFlow> {
+async function buildStoredVenueFlow(config: SupabaseConfig, asset: string, venue: Venue): Promise<VenueFlow> {
   const now = Date.now();
-  const entries = await Promise.all(FLOW_TIMEFRAMES.map(async (frame) => [frame.id, await getFrameMarketFlow(config, venue, frame.durationMs, now)] as const));
-  const fillEntries = await Promise.all(FLOW_TIMEFRAMES.map(async (frame) => [frame.id, await getFrameTrades(config, venue, frame.durationMs, now)] as const));
+  const entries = await Promise.all(FLOW_TIMEFRAMES.map(async (frame) => [frame.id, await getFrameMarketFlow(config, asset, venue, frame.durationMs, now)] as const));
+  const fillEntries = await Promise.all(FLOW_TIMEFRAMES.map(async (frame) => [frame.id, await getFrameTrades(config, asset, venue, frame.durationMs, now)] as const));
   const marketTrades = Object.fromEntries(entries) as VenueFlow["marketTrades"];
   const limitFills = Object.fromEntries(fillEntries.map(([id, trades]) => [id, buildLimitFillFlow(trades, Number.POSITIVE_INFINITY, now)])) as VenueFlow["limitFills"];
   return { marketTrades, limitFills };
 }
 
-async function getFrameMarketFlow(config: SupabaseConfig, venue: Venue, durationMs: number, now: number): Promise<MarketFlow> {
+async function getFrameMarketFlow(config: SupabaseConfig, asset: string, venue: Venue, durationMs: number, now: number): Promise<MarketFlow> {
   const since = new Date(now - durationMs).toISOString();
   const [buys, sells, buyUsd, sellUsd] = await Promise.all([
-    queryTopFrameSide(config, venue, "B", since),
-    queryTopFrameSide(config, venue, "A", since),
-    queryFrameSideTotal(config, venue, "B", since),
-    queryFrameSideTotal(config, venue, "A", since),
+    queryTopFrameSide(config, asset, venue, "B", since),
+    queryTopFrameSide(config, asset, venue, "A", since),
+    queryFrameSideTotal(config, asset, venue, "B", since),
+    queryFrameSideTotal(config, asset, venue, "A", since),
   ]);
   return { buyUsd, buys, netUsd: buyUsd - sellUsd, sellUsd, sells };
 }
 
-async function getFrameTrades(config: SupabaseConfig, venue: Venue, durationMs: number, now: number): Promise<StoredTrade[]> {
+async function getFrameTrades(config: SupabaseConfig, asset: string, venue: Venue, durationMs: number, now: number): Promise<StoredTrade[]> {
   const since = new Date(now - durationMs).toISOString();
   const [buys, sells] = await Promise.all([
-    queryFrameSide(config, venue, "B", since),
-    queryFrameSide(config, venue, "A", since),
+    queryFrameSide(config, asset, venue, "B", since),
+    queryFrameSide(config, asset, venue, "A", since),
   ]);
   return [...buys, ...sells];
 }
 
-async function queryFrameSide(config: SupabaseConfig, venue: Venue, side: TradeSide, since: string): Promise<StoredTrade[]> {
-  return queryTopFrameSide(config, venue, side, since);
+async function queryFrameSide(config: SupabaseConfig, asset: string, venue: Venue, side: TradeSide, since: string): Promise<StoredTrade[]> {
+  return queryTopFrameSide(config, asset, venue, side, since);
 }
 
-async function queryTopFrameSide(config: SupabaseConfig, venue: Venue, side: TradeSide, since: string): Promise<StoredTrade[]> {
+async function queryTopFrameSide(config: SupabaseConfig, asset: string, venue: Venue, side: TradeSide, since: string): Promise<StoredTrade[]> {
   const params = new URLSearchParams({
     select: "side,price,size,value_usd,trade_time",
+    asset: `eq.${asset}`,
     venue: `eq.${venue}`,
     side: `eq.${side}`,
     trade_time: `gte.${since}`,
@@ -85,9 +105,9 @@ async function queryTopFrameSide(config: SupabaseConfig, venue: Venue, side: Tra
   return rows.map(parseStoredTrade).filter(isStoredTrade);
 }
 
-async function queryFrameSideTotal(config: SupabaseConfig, venue: Venue, side: TradeSide, since: string): Promise<number> {
+async function queryFrameSideTotal(config: SupabaseConfig, asset: string, venue: Venue, side: TradeSide, since: string): Promise<number> {
   const response = await supabaseFetch(config, "rpc/hype_dashboard_trade_side_total", {
-    body: JSON.stringify({ p_side: side, p_since: since, p_venue: venue }),
+    body: JSON.stringify({ p_asset: asset, p_side: side, p_since: since, p_venue: venue }),
     method: "POST",
   });
   if (!response.ok) throw new Error(`Supabase ${venue} ${side} total failed: ${response.status}`);
@@ -109,18 +129,24 @@ async function deleteOldTrades(config: SupabaseConfig): Promise<void> {
   if (!response.ok) throw new Error(`Supabase cleanup failed: ${response.status}`);
 }
 
-function normalizeTrades(raw: unknown[], venue: Venue, coin: string): Record<string, unknown>[] {
+function normalizeTrades(raw: unknown[], venue: Venue, asset: string, coin: string): Record<string, unknown>[] {
   return raw.map((trade) => parseRawTrade(trade, coin)).filter(isRawTrade).map((trade) => ({
+    asset,
     coin,
     price: trade.px,
     raw: trade,
     side: trade.side,
     size: trade.sz,
-    trade_id: String(trade.tid ?? trade.hash ?? `${trade.time}-${trade.side}-${trade.px}-${trade.sz}`),
+    trade_id: buildTradeId(asset, venue, trade),
     trade_time: new Date(trade.time).toISOString(),
     value_usd: Number(trade.px) * Number(trade.sz),
     venue,
   }));
+}
+
+function buildTradeId(asset: string, venue: Venue, trade: RawTrade): string {
+  const id = String(trade.tid ?? trade.hash ?? `${trade.time}-${trade.side}-${trade.px}-${trade.sz}`);
+  return asset === "HYPE" ? id : `${asset}:${venue}:${id}`;
 }
 
 function parseRawTrade(trade: unknown, coin: string): RawTrade | null {

@@ -395,7 +395,21 @@ function emptyVenueFlow(): DashboardData["orderFlow"]["spot"] {
   };
 }
 
-async function getPerpAndSpotOrderFlow(marketCoin: string, spotCoin: string | null, price: number, candles: Candle[], monthlyCandles: Candle[]): Promise<DashboardData["orderFlow"]> {
+async function getPerpAndSpotOrderFlow(displayCoin: string, marketCoin: string, spotCoin: string | null, price: number, candles: Candle[], monthlyCandles: Candle[]): Promise<DashboardData["orderFlow"]> {
+  await collectHypeTrades().catch((error) => console.warn("Trade collection failed", error));
+  const storedFlows = await getStoredVenueFlows(displayCoin).catch((error) => {
+    console.warn(`${displayCoin} Supabase trade history unavailable`, error);
+    return null;
+  });
+  if (storedFlows) {
+    return {
+      hourlyVolume: buildHourlyVolumeBars(candles, price),
+      weeklyVolume: buildWeeklyVolumeBars(monthlyCandles),
+      dailyVolume: buildDailyVolumeBars(monthlyCandles),
+      perps: storedFlows.perps,
+      spot: spotCoin ? storedFlows.spot : emptyVenueFlow(),
+    };
+  }
   const [perpRaw, spotRaw] = await Promise.all([
     postHyperliquid({ type: "recentTrades", coin: marketCoin }).catch(() => []),
     spotCoin ? postHyperliquid({ type: "recentTrades", coin: spotCoin }).catch(() => []) : Promise.resolve([]),
@@ -510,7 +524,7 @@ export async function getAssetDashboardData(symbol: string): Promise<DashboardDa
   const spotCoin = getSpotCoin(coin);
   const [twaps, orderFlow, accountPerps] = await Promise.all([
     coin === "HYPE" ? getHypeTwaps(hype.price) : getHoldingTwaps(coin, marketCoin, hype.price),
-    coin === "HYPE" ? getOrderFlow(hype.price, candles, monthlyCandles) : getPerpAndSpotOrderFlow(marketCoin, spotCoin, hype.price, candles, monthlyCandles),
+    coin === "HYPE" ? getOrderFlow(hype.price, candles, monthlyCandles) : getPerpAndSpotOrderFlow(coin, marketCoin, spotCoin, hype.price, candles, monthlyCandles),
     getAccountPerpWatch(),
   ]);
   const rsi14 = calculateRsi(weeklyCandles, hype.price);
