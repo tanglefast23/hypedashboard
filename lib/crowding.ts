@@ -290,7 +290,12 @@ function flowFrameScore(flow: { buys: { value: number }[]; sells: { value: numbe
   const sell = flow.sells.reduce((sum, row) => sum + row.value, 0);
   const total = buy + sell;
   const confidence = Math.min(1, total / 1_000_000);
-  return total ? clampScore(((buy - sell) / total) * 100 * confidence) : 0;
+  return total ? aggressiveFlowRiskScore(buy, sell) * confidence : 0;
+}
+
+export function aggressiveFlowRiskScore(buyUsd: number, sellUsd: number): number {
+  const total = buyUsd + sellUsd;
+  return total ? clampScore(((sellUsd - buyUsd) / total) * 100) : 0;
 }
 
 function twapCrowdingScore(twaps: DashboardData["twaps"], hypePrice: number, orderFlow: DashboardData["orderFlow"]): number {
