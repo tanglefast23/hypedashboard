@@ -43,8 +43,8 @@ export function Dashboard({ initialData }: Props) {
       <HypeTwapPanel data={data} />
       <VolumeBarChart data={data} range={volumeRange} onRange={setVolumeRange} />
       <section className="grid gap-6 xl:grid-cols-2">
-        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Perps Market Buys / Sells" flow={data.orderFlow.perps.marketTrades[flowFrame]} subtitle={`Completed aggressive taker trades on ${data.asset.symbol} perps.`} />
-        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Spot Market Buys / Sells" flow={data.orderFlow.spot.marketTrades[flowFrame]} subtitle={data.asset.spotSymbol ? `Completed aggressive taker trades on ${spotDisplayPair(data.asset.symbol)}` : `${data.asset.symbol} spot tape is not available from the current Hyperliquid source.`} />
+        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Perp buy/sell" flow={data.orderFlow.perps.marketTrades[flowFrame]} subtitle={`Completed aggressive taker trades on ${data.asset.symbol} perps.`} />
+        <OrderFlowCard frame={flowFrame} onFrame={handleFlowFrame} title="Spot buy/sell" flow={data.orderFlow.spot.marketTrades[flowFrame]} subtitle={data.asset.spotSymbol ? `Completed aggressive taker trades on ${spotDisplayPair(data.asset.symbol)}` : `${data.asset.symbol} spot tape is not available from the current Hyperliquid source.`} />
       </section>
     </main>
   );
@@ -82,10 +82,11 @@ function Header({ data, loading, onRefresh }: { data: DashboardData; loading: bo
 }
 
 function HoldingsMenu({ data }: { data: DashboardData }) {
-  const holdings = data.accountPerps.groups.filter((group) => group.position.displayCoin !== "HYPE");
+  const staticRows = new Set(["HYPE", "NEAR", "ZEC", "SPCX", "SPX"]);
+  const holdings = data.accountPerps.groups.filter((group) => !staticRows.has(group.position.displayCoin.toUpperCase()));
   return (
     <div className="absolute right-0 top-12 z-20 w-80 rounded-2xl border border-slate-700 bg-slate-950/95 p-3 shadow-2xl shadow-black/50 backdrop-blur">
-      <div className="mb-2 flex items-center justify-between"><p className="text-sm font-semibold">Watched holdings</p><span className="mono text-xs text-slate-500">{holdings.length + 2}</span></div>
+      <div className="mb-2 flex items-center justify-between"><p className="text-sm font-semibold">Watched holdings</p><span className="mono text-xs text-slate-500">{holdings.length + 3}</span></div>
       <div className="space-y-2">
         <Link className="block rounded-xl border border-emerald-400/30 bg-emerald-300/10 p-3 hover:border-emerald-300/70" href="/">
           <div className="flex items-center justify-between gap-3"><span className="font-semibold text-emerald-200">HOME</span><span className="mono text-xs text-emerald-300">HYPE</span></div>

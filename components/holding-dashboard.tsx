@@ -58,10 +58,11 @@ function HoldingHeader({ data, loading, onRefresh }: { data: HoldingDashboardDat
 }
 
 function HoldingsMenu({ data }: { data: HoldingDashboardData }) {
-  const holdings = data.holdings.groups.filter((group) => group.position.displayCoin !== "HYPE");
+  const staticRows = new Set(["HYPE", "NEAR", "ZEC", "SPCX", "SPX"]);
+  const holdings = data.holdings.groups.filter((group) => !staticRows.has(group.position.displayCoin.toUpperCase()));
   return (
     <div className="absolute right-0 top-12 z-20 w-80 rounded-2xl border border-slate-700 bg-slate-950/95 p-3 shadow-2xl shadow-black/50 backdrop-blur">
-      <div className="mb-2 flex items-center justify-between"><p className="text-sm font-semibold">Watched holdings</p><span className="mono text-xs text-slate-500">{holdings.length + 2}</span></div>
+      <div className="mb-2 flex items-center justify-between"><p className="text-sm font-semibold">Watched holdings</p><span className="mono text-xs text-slate-500">{holdings.length + 3}</span></div>
       <div className="space-y-2">
         <Link className="block rounded-xl border border-emerald-400/30 bg-emerald-300/10 p-3 hover:border-emerald-300/70" href="/">
           <div className="flex items-center justify-between"><span className="font-semibold text-emerald-200">HOME</span><span className="mono text-xs text-emerald-300">HYPE</span></div>
