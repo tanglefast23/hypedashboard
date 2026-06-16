@@ -13,10 +13,10 @@ type LiveTwap = HypeTwap & { liveProgress: number; liveRemainingMs: number; live
 type Status = { data: HoldingDashboardData | null; error: string | null; loading: boolean };
 
 const FIRST_CLASS_DASHBOARDS = [
-  { href: "/", label: "HYPE", logo: "/logos/hype.jpg", logoClass: "h-7 w-7 rounded-full", tone: "border-emerald-300/40 bg-emerald-300/10" },
-  { href: "/crypto/NEAR", label: "NEAR", logo: "/logos/near.jpg", logoClass: "h-7 w-7 rounded-full", tone: "border-lime-300/40 bg-lime-300/10" },
-  { href: "/crypto/ZEC", label: "ZEC", logo: "/logos/zec.png", logoClass: "h-7 w-7 rounded-full", tone: "border-amber-300/40 bg-amber-300/10" },
-  { href: "/crypto/SPCX", label: "SpaceX", logo: "/logos/spacex.svg", logoClass: "h-4 w-8", tone: "border-sky-300/40 bg-sky-300/10" },
+  { href: "/", label: "HYPE", logo: "/logos/hype.jpg", logoClass: "h-7 w-7 rounded-full", buttonClass: "h-11 w-11", tone: "border-emerald-300/40 bg-emerald-300/10" },
+  { href: "/crypto/NEAR", label: "NEAR", logo: "/logos/near.jpg", logoClass: "h-7 w-7 rounded-full", buttonClass: "h-11 w-11", tone: "border-lime-300/40 bg-lime-300/10" },
+  { href: "/crypto/ZEC", label: "ZEC", logo: "/logos/zec.png", logoClass: "h-7 w-7 rounded-full", buttonClass: "h-11 w-11", tone: "border-amber-300/40 bg-amber-300/10" },
+  { href: "/crypto/SPCX", label: "SpaceX", logo: "/logos/spacex.svg", logoClass: "h-5 w-12", buttonClass: "h-11 w-16", tone: "border-sky-300/40 bg-sky-300/10" },
 ] as const;
 
 const FIRST_CLASS_SYMBOLS = new Set(["HYPE", "NEAR", "ZEC", "SPCX", "SPX"]);
@@ -80,7 +80,7 @@ function HoldingsMenu({ data }: { data: HoldingDashboardData }) {
 }
 
 function FirstClassDashboardButtons({ active }: { active: string }) {
-  return <div className="flex gap-2">{FIRST_CLASS_DASHBOARDS.map((item) => <Link aria-label={`${item.label} dashboard`} className={`inline-flex h-11 w-11 items-center justify-center rounded-full border shadow-lg shadow-black/20 transition hover:scale-105 ${item.tone} ${active === item.label || (active === "SPCX" && item.label === "SpaceX") ? "ring-2 ring-white/40" : ""}`} href={item.href} key={item.label} title={item.label}><img alt="" className={`${item.logoClass} object-contain`} src={item.logo} /></Link>)}</div>;
+  return <div className="flex gap-2">{FIRST_CLASS_DASHBOARDS.map((item) => <Link aria-label={`${item.label} dashboard`} className={`inline-flex ${item.buttonClass} items-center justify-center rounded-full border shadow-lg shadow-black/20 transition hover:scale-105 ${item.tone} ${active === item.label || (active === "SPCX" && item.label === "SpaceX") ? "ring-2 ring-white/40" : ""}`} href={item.href} key={item.label} title={item.label}><img alt="" className={`${item.logoClass} object-contain`} src={item.logo} /></Link>)}</div>;
 }
 
 function HeaderChangePills({ changes }: { changes: Record<HeaderTimeframeId, number | null> }) {
