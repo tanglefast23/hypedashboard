@@ -13,10 +13,10 @@ type LiveTwap = HypeTwap & { liveProgress: number; liveRemainingMs: number; live
 type Status = { data: HoldingDashboardData | null; error: string | null; loading: boolean };
 
 const FIRST_CLASS_DASHBOARDS = [
-  { href: "/", label: "HYPE", logo: "/logos/hype.jpg", logoClass: "h-full w-full scale-[0.9]", tone: "border-emerald-300/50 bg-emerald-300/10" },
-  { href: "/crypto/NEAR", label: "NEAR", logo: "/logos/near.jpg", logoClass: "h-full w-full scale-[1.22]", tone: "border-lime-300/50 bg-lime-300/10" },
-  { href: "/crypto/ZEC", label: "ZEC", logo: "/logos/zec.png", logoClass: "h-full w-full scale-[1.22]", tone: "border-amber-300/50 bg-amber-300/10" },
-  { href: "/crypto/SPCX", label: "SpaceX", logo: "/logos/spacex.svg", logoClass: "h-9 w-28 max-w-none translate-x-1 scale-[1.05]", tone: "border-sky-300/50 bg-sky-300/10" },
+  { href: "/", label: "HYPE", logo: "/logos/hype.jpg", logoClass: "h-full w-full scale-[0.81]", tone: "border-emerald-300/50 bg-emerald-300/10" },
+  { href: "/crypto/NEAR", label: "NEAR", logo: "/logos/near.jpg", logoClass: "h-full w-full scale-[0.92]", tone: "border-lime-300/50 bg-lime-300/10" },
+  { href: "/crypto/ZEC", label: "ZEC", logo: "/logos/zec.png", logoClass: "h-full w-full scale-[0.92]", tone: "border-amber-300/50 bg-amber-300/10" },
+  { href: "/crypto/SPCX", label: "SpaceX", logo: "/logos/spacex.svg", logoClass: "h-9 w-28 max-w-none translate-x-1 scale-[0.95]", tone: "border-sky-300/50 bg-sky-300/10" },
 ] as const;
 
 const FIRST_CLASS_SYMBOLS = new Set(["HYPE", "NEAR", "ZEC", "SPCX", "SPX"]);
