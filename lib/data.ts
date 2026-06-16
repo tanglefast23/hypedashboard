@@ -275,12 +275,12 @@ function normalizePerpCoin(coin: string): string {
 
 function dexForCoin(coin: string): string | undefined { return coin.includes(":") ? coin.split(":")[0] : undefined; }
 
-async function getHoldingTwaps(coin: string, price: number): Promise<HoldingDashboardData["twaps"]> {
-  return cached(`holding-twaps-${coin}-v2`, 30_000, async () => {
+async function getHoldingTwaps(displayCoin: string, marketCoin: string, price: number): Promise<HoldingDashboardData["twaps"]> {
+  return cached(`holding-twaps-${displayCoin}-${marketCoin}-v2`, 30_000, async () => {
     const [rawRowsResult, assetResult, spotAssetResult, userHistoryResult, userFillsResult] = await Promise.allSettled([
       getJson(HYPURRSCAN_TWAPS_URL),
-      getPerpAssetIndex(coin),
-      getSpotTwapAssetIndex(coin),
+      getPerpAssetIndex(marketCoin),
+      getSpotTwapAssetIndex(displayCoin),
       postHyperliquid({ type: "twapHistory", user: WATCHED_PERP_ADDRESS }),
       postHyperliquid({ type: "userTwapSliceFills", user: WATCHED_PERP_ADDRESS }),
     ]);
@@ -290,9 +290,9 @@ async function getHoldingTwaps(coin: string, price: number): Promise<HoldingDash
     const spotAsset = spotAssetResult.status === "fulfilled" ? spotAssetResult.value : null;
     const userHistory = userHistoryResult.status === "fulfilled" ? z.array(z.unknown()).parse(userHistoryResult.value) : [];
     const userFills = userFillsResult.status === "fulfilled" ? z.array(z.unknown()).parse(userFillsResult.value) : [];
-    const executedSizeById = aggregateUserTwapExecutedSizes(userFills, coin);
-    const publicRows = normalizeAssetTwapRows(rawRows, { assetMap: buildHoldingTwapAssetMap(coin, price, asset, spotAsset), now });
-    const userRows = normalizeUserTwapHistory(userHistory, { coin, executedSizeById, now, price });
+    const executedSizeById = aggregateUserTwapExecutedSizes(userFills, marketCoin);
+    const publicRows = normalizeAssetTwapRows(rawRows, { assetMap: buildHoldingTwapAssetMap(displayCoin, price, asset, spotAsset), now });
+    const userRows = normalizeUserTwapHistory(userHistory, { coin: marketCoin, displayCoin, executedSizeById, now, price });
     const rows = dedupeTwapRows([...userRows, ...publicRows]);
     return { pressure: buildTwapPressure(rows, now), rows };
   });
@@ -335,6 +335,8 @@ async function getPerpCandles(coin: string, interval: string, durationMs: number
   });
 }
 
+function getMarketCoin(symbol: string): string { return symbol === "SPCX" ? "SPX" : symbol; }
+
 export async function getHoldingDashboardData(coin: string): Promise<HoldingDashboardData> {
   const cleanCoin = normalizePerpCoin(coin);
   const [candles, weeklyCandles, monthlyCandles, midsRaw, holdings] = await Promise.all([
@@ -346,7 +348,7 @@ export async function getHoldingDashboardData(coin: string): Promise<HoldingDash
   ]);
   const mids = z.record(z.string()).parse(midsRaw);
   const price = toNumber(mids[cleanCoin]) ?? monthlyCandles.at(-1)?.close ?? 0;
-  const twaps = await getHoldingTwaps(cleanCoin, price);
+  const twaps = await getHoldingTwaps(cleanCoin, cleanCoin, price);
   return {
     generatedAt: new Date().toISOString(),
     asset: { coin: cleanCoin, price, headerChanges: getHeaderChanges(price, weeklyCandles), changes: getPriceChanges(price, candles), volumes: getVolumes(candles, price) },
@@ -369,10 +371,10 @@ function calculateRsi(candles: Candle[], currentPrice: number, period = 14): num
   return 100 - 100 / (1 + rs);
 }
 
-async function getAssetMarket(coin: string, priceCandles: Candle[], headerCandles: Candle[]): Promise<DashboardData["hype"]> {
+async function getAssetMarket(marketCoin: string, priceCandles: Candle[], headerCandles: Candle[]): Promise<DashboardData["hype"]> {
   const midsRaw = await postHyperliquid({ type: "allMids" });
   const mids = z.record(z.string()).parse(midsRaw);
-  const price = toNumber(mids[coin]) ?? priceCandles.at(-1)?.close ?? 0;
+  const price = toNumber(mids[marketCoin]) ?? priceCandles.at(-1)?.close ?? 0;
   return { price, headerChanges: getHeaderChanges(price, headerCandles), changes: getPriceChanges(price, priceCandles), volumes: getVolumes(priceCandles, price), marketCap: null, fdv: null, volume24h: null };
 }
 
@@ -383,9 +385,9 @@ function emptyVenueFlow(): DashboardData["orderFlow"]["spot"] {
   };
 }
 
-async function getPerpAndSpotOrderFlow(coin: string, spotCoin: string | null, price: number, candles: Candle[], monthlyCandles: Candle[]): Promise<DashboardData["orderFlow"]> {
+async function getPerpAndSpotOrderFlow(marketCoin: string, spotCoin: string | null, price: number, candles: Candle[], monthlyCandles: Candle[]): Promise<DashboardData["orderFlow"]> {
   const [perpRaw, spotRaw] = await Promise.all([
-    postHyperliquid({ type: "recentTrades", coin }).catch(() => []),
+    postHyperliquid({ type: "recentTrades", coin: marketCoin }).catch(() => []),
     spotCoin ? postHyperliquid({ type: "recentTrades", coin: spotCoin }).catch(() => []) : Promise.resolve([]),
   ]);
   return {
@@ -403,18 +405,18 @@ function getSpotCoin(symbol: string): string | null {
   return null;
 }
 
-async function getGenericCrowdingData(coin: string, market: DashboardData["hype"], orderFlow: DashboardData["orderFlow"], twaps: DashboardData["twaps"], rsi14: number | null): Promise<DashboardData["crowding"]> {
+async function getGenericCrowdingData(marketCoin: string, market: DashboardData["hype"], orderFlow: DashboardData["orderFlow"], twaps: DashboardData["twaps"], rsi14: number | null, displayCoin = marketCoin): Promise<DashboardData["crowding"]> {
   const raw = await postHyperliquid({ type: "metaAndAssetCtxs" });
   const [metaRaw, ctxsRaw] = z.tuple([z.record(z.unknown()), z.array(z.record(z.unknown()))]).parse(raw);
   const meta = z.array(z.record(z.unknown())).parse(metaRaw.universe);
-  const index = meta.findIndex((row) => row.name === coin);
+  const index = meta.findIndex((row) => row.name === marketCoin);
   const ctx = ctxsRaw[index] ?? {};
   const oiUsd = (toNumber(ctx.openInterest) ?? 0) * (toNumber(ctx.markPx) ?? market.price);
   const funding = toNumber(ctx.funding);
   const [liquidation, coinalyzeOiChange, cexOiChange] = await Promise.all([
-    getCoinalyzeLiquidationImbalance(coin).catch(() => null),
-    getCoinalyzeOiChangePercent(coin).catch(() => null),
-    getCexOiChangePercent(coin).catch(() => null),
+    getCoinalyzeLiquidationImbalance(marketCoin).catch(() => null),
+    getCoinalyzeOiChangePercent(marketCoin).catch(() => null),
+    getCexOiChangePercent(marketCoin).catch(() => null),
   ]);
   const oiChange24hPercent = coinalyzeOiChange ?? cexOiChange;
   const fundingScore = funding === null ? 0 : Math.max(-100, Math.min(100, funding * 1_000_000));
@@ -425,7 +427,7 @@ async function getGenericCrowdingData(coin: string, market: DashboardData["hype"
   const liquidationScore = liquidation?.score ?? 0;
   const score = Math.round(Math.max(-100, Math.min(100, 0.35 * fundingScore + 0.25 * liquidationScore + 0.2 * oiPriceScore + 0.15 * flowScore + 0.05 * twapScore)));
   const current: DashboardData["crowding"] = { bars: neutralCrowdingBars(oiUsd, score), breakdown: { flow: Math.round(flowScore), fundingOi: Math.round(fundingScore), liquidation: Math.round(liquidationScore), oiPrice: Math.round(oiPriceScore), twap: Math.round(twapScore) }, generatedAt: new Date().toISOString(), label: score > 50 ? "Crowded Long" : score > 20 ? "Long-Leaning" : score < -50 ? "Crowded Short" : score < -20 ? "Short-Leaning" : "Balanced", metrics: { flowNetUsd, liquidationImbalanceUsd: liquidation?.imbalanceUsd ?? null, oiChange24hPercent, priceChange24hPercent: market.changes["1d"], rsi14, rsiModifier: 1, twapPressure1hUsd: twaps.pressure.next1h, weightedFunding: funding }, score, sources: oiUsd ? [{ funding, name: "Hyperliquid", oiUsd, source: "official" }] : [], summary: "Perp positioning uses Hyperliquid-native funding, taker flow, TWAP pressure, and current OI for this market.", totalOiUsd: oiUsd };
-  const storedBars = await getStoredCrowdingBars(coin).catch(() => null);
+  const storedBars = await getStoredCrowdingBars(displayCoin).catch(() => null);
   return storedBars ? { ...current, bars: { ...current.bars, ...storedBars } } : current;
 }
 
@@ -487,19 +489,20 @@ export async function getDashboardData(): Promise<DashboardData> {
 
 export async function getAssetDashboardData(symbol: string): Promise<DashboardData> {
   const coin = normalizePerpCoin(symbol).replace(/^XYZ:/, "");
+  const marketCoin = getMarketCoin(coin);
   const [candles, weeklyCandles, monthlyCandles] = await Promise.all([
-    coin === "HYPE" ? getHypeCandles24h() : getPerpCandles(coin, "1m", 24 * 60 * 60 * 1000),
-    coin === "HYPE" ? getHypeCandles7d() : getPerpCandles(coin, "1h", 7 * 24 * 60 * 60 * 1000),
-    coin === "HYPE" ? getHypeCandles30d() : getPerpCandles(coin, "1d", 30 * 24 * 60 * 60 * 1000),
+    coin === "HYPE" ? getHypeCandles24h() : getPerpCandles(marketCoin, "1m", 24 * 60 * 60 * 1000),
+    coin === "HYPE" ? getHypeCandles7d() : getPerpCandles(marketCoin, "1h", 7 * 24 * 60 * 60 * 1000),
+    coin === "HYPE" ? getHypeCandles30d() : getPerpCandles(marketCoin, "1d", 30 * 24 * 60 * 60 * 1000),
   ]);
-  const hype = coin === "HYPE" ? await getHypeMarket(candles, weeklyCandles) : await getAssetMarket(coin, candles, weeklyCandles);
+  const hype = coin === "HYPE" ? await getHypeMarket(candles, weeklyCandles) : await getAssetMarket(marketCoin, candles, weeklyCandles);
   const spotCoin = getSpotCoin(coin);
   const [twaps, orderFlow, accountPerps] = await Promise.all([
-    coin === "HYPE" ? getHypeTwaps(hype.price) : getHoldingTwaps(coin, hype.price),
-    coin === "HYPE" ? getOrderFlow(hype.price, candles, monthlyCandles) : getPerpAndSpotOrderFlow(coin, spotCoin, hype.price, candles, monthlyCandles),
+    coin === "HYPE" ? getHypeTwaps(hype.price) : getHoldingTwaps(coin, marketCoin, hype.price),
+    coin === "HYPE" ? getOrderFlow(hype.price, candles, monthlyCandles) : getPerpAndSpotOrderFlow(marketCoin, spotCoin, hype.price, candles, monthlyCandles),
     getAccountPerpWatch(),
   ]);
   const rsi14 = calculateRsi(weeklyCandles, hype.price);
-  const crowding = coin === "HYPE" ? await getCrowdingData({ hypePrice: hype.price, orderFlow, priceChange1d: hype.changes["1d"], rsi14, twaps }) : await getGenericCrowdingData(coin, hype, orderFlow, twaps, rsi14);
+  const crowding = coin === "HYPE" ? await getCrowdingData({ hypePrice: hype.price, orderFlow, priceChange1d: hype.changes["1d"], rsi14, twaps }) : await getGenericCrowdingData(marketCoin, hype, orderFlow, twaps, rsi14, coin);
   return { generatedAt: new Date().toISOString(), asset: { symbol: coin, spotSymbol: spotCoin }, hype, twaps, orderFlow, accountPerps, crowding };
 }

@@ -79,7 +79,7 @@ export function aggregateUserTwapExecutedSizes(rawRows: unknown[], coin: string)
   }, {});
 }
 
-export function normalizeUserTwapHistory(rawRows: unknown[], options: { coin: string; executedSizeById?: Record<number, number>; now: number; price: number }): HypeTwap[] {
+export function normalizeUserTwapHistory(rawRows: unknown[], options: { coin: string; displayCoin?: string; executedSizeById?: Record<number, number>; now: number; price: number }): HypeTwap[] {
   const latest = new Map<number, z.infer<typeof userTwapHistorySchema>>();
   for (const raw of rawRows) {
     const parsed = userTwapHistorySchema.safeParse(raw);
@@ -141,7 +141,7 @@ function parseTwapRow(raw: unknown, options: { assetMap: Record<number, { token:
   };
 }
 
-function parseUserTwap(row: z.infer<typeof userTwapHistorySchema>, options: { coin: string; executedSizeById?: Record<number, number>; now: number; price: number }): HypeTwap | null {
+function parseUserTwap(row: z.infer<typeof userTwapHistorySchema>, options: { coin: string; displayCoin?: string; executedSizeById?: Record<number, number>; now: number; price: number }): HypeTwap | null {
   if (row.status.status !== "activated") return null;
   const totalAmount = Number(row.state.sz);
   const historyExecutedAmount = Number(row.state.executedSz);
@@ -161,7 +161,7 @@ function parseUserTwap(row: z.infer<typeof userTwapHistorySchema>, options: { co
     remainingMs: Math.max(0, endTime - options.now),
     side: row.state.side === "B" ? "BUY" : "SELL",
     startTime: row.state.timestamp,
-    token: options.coin,
+    token: options.displayCoin ?? options.coin,
     user: row.state.user,
     value: amount * options.price,
   };

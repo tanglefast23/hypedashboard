@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
       getDashboardData(),
       getAssetDashboardData("NEAR"),
       getAssetDashboardData("ZEC"),
+      getAssetDashboardData("SPCX"),
     ]);
     const crowding = await Promise.all(dashboards.map((dashboard) => saveCrowdingSnapshot(dashboard.crowding, dashboard.asset.symbol)));
     return NextResponse.json({ crowding, trades, collectedAt: new Date().toISOString() });

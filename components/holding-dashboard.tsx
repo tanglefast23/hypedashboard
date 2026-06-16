@@ -12,6 +12,15 @@ type VolumeRange = "day" | "week" | "month";
 type LiveTwap = HypeTwap & { liveProgress: number; liveRemainingMs: number; liveValue: number; snapshotElapsedMs: number };
 type Status = { data: HoldingDashboardData | null; error: string | null; loading: boolean };
 
+const FIRST_CLASS_DASHBOARDS = [
+  { href: "/", label: "HYPE", logo: "H", tone: "border-emerald-300/40 bg-emerald-300/10 text-emerald-200" },
+  { href: "/crypto/NEAR", label: "NEAR", logo: "N", tone: "border-lime-300/40 bg-lime-300/10 text-lime-200" },
+  { href: "/crypto/ZEC", label: "ZEC", logo: "Z", tone: "border-amber-300/40 bg-amber-300/10 text-amber-200" },
+  { href: "/crypto/SPCX", label: "SpaceX", logo: "X", tone: "border-sky-300/40 bg-sky-300/10 text-sky-200" },
+] as const;
+
+const FIRST_CLASS_SYMBOLS = new Set(["HYPE", "NEAR", "ZEC", "SPCX", "SPX"]);
+
 export function HoldingDashboard({ initialData }: { initialData: HoldingDashboardData }) {
   const [status, setStatus] = useState<Status>({ data: initialData, error: null, loading: false });
   const [range, setRange] = useState<VolumeRange>("day");
@@ -48,9 +57,10 @@ function HoldingHeader({ data, loading, onRefresh }: { data: HoldingDashboardDat
   return (
     <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:gap-4"><h1 className="text-4xl font-semibold tracking-tight md:text-6xl">{displayCoin(data.asset.coin)}</h1><div className="flex flex-wrap items-baseline gap-x-3 gap-y-2"><p className="mono text-3xl font-semibold text-emerald-300 md:text-5xl">{formatUsd(data.asset.price, 4)}</p><HeaderChangePills changes={data.asset.headerChanges} /></div></div>
-      <div className="relative flex gap-2 self-start md:self-auto">
+      <div className="relative flex flex-wrap justify-end gap-2 self-start md:self-auto">
         <button aria-label="Show watched holdings" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-700/80 bg-slate-900/60 text-slate-200 hover:bg-slate-800" onClick={() => setOpen((volumeUsd) => !volumeUsd)}><List className="h-4 w-4" /></button>
         <button aria-label="Refresh holding dashboard" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-700/80 bg-slate-900/60 text-slate-200 hover:bg-slate-800" onClick={onRefresh}><RefreshCcw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} /></button>
+        <FirstClassDashboardButtons active={displayCoin(data.asset.coin)} />
         {open ? <HoldingsMenu data={data} /> : null}
       </div>
     </header>
@@ -58,21 +68,19 @@ function HoldingHeader({ data, loading, onRefresh }: { data: HoldingDashboardDat
 }
 
 function HoldingsMenu({ data }: { data: HoldingDashboardData }) {
-  const staticRows = new Set(["HYPE", "NEAR", "ZEC", "SPCX", "SPX"]);
-  const holdings = data.holdings.groups.filter((group) => !staticRows.has(group.position.displayCoin.toUpperCase()));
+  const holdings = data.holdings.groups.filter((group) => !FIRST_CLASS_SYMBOLS.has(group.position.displayCoin.toUpperCase()));
   return (
     <div className="absolute right-0 top-12 z-20 w-80 rounded-2xl border border-slate-700 bg-slate-950/95 p-3 shadow-2xl shadow-black/50 backdrop-blur">
-      <div className="mb-2 flex items-center justify-between"><p className="text-sm font-semibold">Watched holdings</p><span className="mono text-xs text-slate-500">{holdings.length + 3}</span></div>
+      <div className="mb-2 flex items-center justify-between"><p className="text-sm font-semibold">Watched holdings</p><span className="mono text-xs text-slate-500">{holdings.length}</span></div>
       <div className="space-y-2">
-        <Link className="block rounded-xl border border-emerald-400/30 bg-emerald-300/10 p-3 hover:border-emerald-300/70" href="/">
-          <div className="flex items-center justify-between"><span className="font-semibold text-emerald-200">HOME</span><span className="mono text-xs text-emerald-300">HYPE</span></div>
-        </Link>
-        <Link className="block rounded-xl border border-slate-800 bg-slate-900/60 p-3 hover:border-emerald-400/50" href="/crypto/NEAR"><div className="flex items-center justify-between"><span className="font-semibold">NEAR</span><span className="mono text-xs text-emerald-300">CRYPTO</span></div></Link>
-        <Link className="block rounded-xl border border-slate-800 bg-slate-900/60 p-3 hover:border-emerald-400/50" href="/crypto/ZEC"><div className="flex items-center justify-between"><span className="font-semibold">ZEC</span><span className="mono text-xs text-emerald-300">CRYPTO</span></div></Link>
-        {holdings.map((group) => <Link className="block rounded-xl border border-slate-800 bg-slate-900/60 p-3 hover:border-emerald-400/50" href={`/holdings/${encodeURIComponent(group.coin)}`} key={group.coin}><div className="flex items-center justify-between"><span className="font-semibold">{group.position.displayCoin}</span><span className={`mono text-xs ${group.position.side === "LONG" ? "text-emerald-300" : "text-rose-300"}`}>{group.position.side}</span></div></Link>)}
+        {holdings.length ? holdings.map((group) => <Link className="block rounded-xl border border-slate-800 bg-slate-900/60 p-3 hover:border-emerald-400/50" href={`/holdings/${encodeURIComponent(group.coin)}`} key={group.coin}><div className="flex items-center justify-between"><span className="font-semibold">{group.position.displayCoin}</span><span className={`mono text-xs ${group.position.side === "LONG" ? "text-emerald-300" : "text-rose-300"}`}>{group.position.side}</span></div></Link>) : <p className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-sm text-slate-500">No non-dashboard holdings found.</p>}
       </div>
     </div>
   );
+}
+
+function FirstClassDashboardButtons({ active }: { active: string }) {
+  return <div className="flex gap-2">{FIRST_CLASS_DASHBOARDS.map((item) => <Link aria-label={`${item.label} dashboard`} className={`inline-flex h-11 w-11 items-center justify-center rounded-full border text-sm font-black tracking-tight shadow-lg shadow-black/20 transition hover:scale-105 ${item.tone} ${active === item.label || (active === "SPCX" && item.label === "SpaceX") ? "ring-2 ring-white/40" : ""}`} href={item.href} key={item.label} title={item.label}>{item.logo}</Link>)}</div>;
 }
 
 function HeaderChangePills({ changes }: { changes: Record<HeaderTimeframeId, number | null> }) {
