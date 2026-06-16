@@ -1,6 +1,7 @@
 const COINALYZE_BASE_URL = "https://api.coinalyze.net/v1";
 const MARKET_CACHE_MS = 6 * 60 * 60 * 1000;
 const LIQUIDATION_WINDOW_SECONDS = 60 * 60;
+const FULL_LIQUIDATION_IMBALANCE_USD = 5_000_000;
 const MAX_SYMBOLS = 20;
 
 const cachedSymbols = new Map<string, { expiresAt: number; symbols: string[] }>();
@@ -67,12 +68,15 @@ export async function getCoinalyzeLiquidationImbalance(baseAsset = "HYPE"): Prom
     to: String(now),
   });
   const totals = sumLiquidations(histories);
-  const total = totals.longLiquidationsUsd + totals.shortLiquidationsUsd;
   const imbalanceUsd = totals.longLiquidationsUsd - totals.shortLiquidationsUsd;
-  const confidence = Math.min(1, total / 1_000_000);
-  const value = total ? { ...totals, imbalanceUsd, score: (imbalanceUsd / total) * 100 * confidence, sourceCount: histories.length } : null;
+  const total = totals.longLiquidationsUsd + totals.shortLiquidationsUsd;
+  const value = total ? { ...totals, imbalanceUsd, score: liquidationImbalanceScore(imbalanceUsd), sourceCount: histories.length } : null;
   cachedLiquidation.set(cacheKey, { expiresAt: Date.now() + 60 * 1000, value });
   return value;
+}
+
+export function liquidationImbalanceScore(imbalanceUsd: number): number {
+  return clampScore((imbalanceUsd / FULL_LIQUIDATION_IMBALANCE_USD) * 100);
 }
 
 async function getPerpSymbols(apiKey: string, baseAsset: string): Promise<string[]> {
@@ -126,6 +130,8 @@ function weightedOpenInterestChange(histories: OpenInterestHistory[]): number | 
 function oiSourceBoost(symbol: string | undefined): number {
   return symbol?.toUpperCase().includes("BINANCE") || symbol?.toUpperCase().endsWith(".A") ? 1.2 : 1;
 }
+
+function clampScore(value: number): number { return Math.max(-100, Math.min(100, value)); }
 
 async function getCoinalyze<T>(path: string, apiKey: string, params: Record<string, string>): Promise<T> {
   const url = new URL(`${COINALYZE_BASE_URL}${path}`);
