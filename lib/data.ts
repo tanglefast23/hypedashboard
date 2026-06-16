@@ -6,7 +6,7 @@ import { getStoredCrowdingBars } from "./crowding-history";
 import { getCoinalyzeLiquidationImbalance, getCoinalyzeOiChangePercent } from "./coinalyze";
 import { calculatePriceChangePercent } from "./price-change";
 import { collectHypeTrades, getStoredVenueFlows } from "./trade-history";
-import { aggregateUserTwapExecutedSizes, buildTwapPressure, normalizeAssetTwapRows, normalizeTwapRows, normalizeUserTwapHistory } from "./twap";
+import { aggregateUserTwapExecutedSizes, buildTwapPressure, dedupeTwapRows, normalizeAssetTwapRows, normalizeTwapRows, normalizeUserTwapHistory } from "./twap";
 import type { Candle, DashboardData, HoldingDashboardData } from "./types";
 
 const HYPERLIQUID_INFO_URLS = ["https://api.hyperliquid.xyz/info", "https://api-ui.hyperliquid.xyz/info"];
@@ -293,7 +293,7 @@ async function getHoldingTwaps(coin: string, price: number): Promise<HoldingDash
     const executedSizeById = aggregateUserTwapExecutedSizes(userFills, coin);
     const publicRows = normalizeAssetTwapRows(rawRows, { assetMap: buildHoldingTwapAssetMap(coin, price, asset, spotAsset), now });
     const userRows = normalizeUserTwapHistory(userHistory, { coin, executedSizeById, now, price });
-    const rows = dedupeTwaps([...userRows, ...publicRows]);
+    const rows = dedupeTwapRows([...userRows, ...publicRows]);
     return { pressure: buildTwapPressure(rows, now), rows };
   });
 }
@@ -333,15 +333,6 @@ async function getPerpCandles(coin: string, interval: string, durationMs: number
     const raw = await postHyperliquid({ type: "candleSnapshot", req: { coin, interval, startTime, endTime } });
     return z.array(z.record(z.unknown())).parse(raw).map(parseCandle).filter(isCandle);
   });
-}
-
-function dedupeTwaps<T extends { hash: string; side: string; startTime: number; token: string; user: string; value: number }>(rows: T[]): T[] {
-  const byOrder = new Map<string, T>();
-  for (const row of rows) {
-    const key = `${row.user.toLowerCase()}-${row.token}-${row.side}-${row.startTime}`;
-    if (!byOrder.has(key)) byOrder.set(key, row);
-  }
-  return [...byOrder.values()].sort((a, b) => b.value - a.value);
 }
 
 export async function getHoldingDashboardData(coin: string): Promise<HoldingDashboardData> {

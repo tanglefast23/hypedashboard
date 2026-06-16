@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateTwapPressure, normalizeTwapRows } from "./twap";
+import { calculateTwapPressure, dedupeTwapRows, normalizeTwapRows } from "./twap";
 
 const now = 1_000_000;
 
@@ -24,7 +24,35 @@ describe("live TWAP analytics", () => {
     expect(calculateTwapPressure(rows, 60 * 60_000, now)).toBe(3000);
     expect(calculateTwapPressure(rows, 24 * 60 * 60_000, now)).toBe(0);
   });
+  it("de-dupes the same wallet TWAP when public feed labels a perp as -USD and wallet history uses the bare coin", () => {
+    const rows = dedupeTwapRows([
+      normalizedTwap({ hash: "user-twap-1", token: "NEAR", value: 120_000 }),
+      normalizedTwap({ hash: "public-hash", token: "NEAR-USD", value: 150_000 }),
+      normalizedTwap({ hash: "different-start", startTime: now + 1, token: "NEAR-USD", value: 10_000 }),
+    ]);
+
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.hash)).toEqual(["user-twap-1", "different-start"]);
+  });
 });
+
+function normalizedTwap(overrides: Partial<{ hash: string; side: "BUY" | "SELL"; startTime: number; token: string; user: string; value: number }> = {}) {
+  return {
+    amount: 1,
+    asset: 74,
+    durationMs: 30 * 60_000,
+    endTime: now + 30 * 60_000,
+    hash: "hash",
+    progress: 0,
+    remainingMs: 30 * 60_000,
+    side: "BUY" as const,
+    startTime: now,
+    token: "NEAR",
+    user: "0x89c0fee4b7ca37711219092cd1c0d2b4f7af87c1",
+    value: 1,
+    ...overrides,
+  };
+}
 
 function rawTwap({ asset, buy, minutes, size, time }: { asset: number; buy: boolean; minutes: number; size: string; time: number }) {
   return {

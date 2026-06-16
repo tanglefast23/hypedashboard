@@ -90,6 +90,19 @@ export function normalizeUserTwapHistory(rawRows: unknown[], options: { coin: st
   return [...latest.values()].map((row) => parseUserTwap(row, options)).filter(isHypeTwap).sort((a, b) => b.value - a.value);
 }
 
+export function dedupeTwapRows<T extends { hash: string; side: string; startTime: number; token: string; user: string; value: number }>(rows: T[]): T[] {
+  const byOrder = new Map<string, T>();
+  for (const row of rows) {
+    // Wallet TWAP history labels perps as the bare coin (e.g. NEAR), while
+    // HypurrScan's public active feed labels the same order as NEAR-USD.
+    // Treat those as one order so a user's own active TWAP is not double-counted.
+    const canonicalToken = row.token.replace(/-USD$/, "");
+    const key = `${row.user.toLowerCase()}-${canonicalToken}-${row.side}-${row.startTime}`;
+    if (!byOrder.has(key)) byOrder.set(key, row);
+  }
+  return [...byOrder.values()].sort((a, b) => b.value - a.value);
+}
+
 export function calculateTwapPressure(rows: HypeTwap[], windowMs: number, now: number): number {
   return rows.reduce((total, row) => total + calculateRowPressure(row, windowMs, now), 0);
 }
