@@ -335,7 +335,7 @@ async function getPerpCandles(coin: string, interval: string, durationMs: number
   });
 }
 
-function getMarketCoin(symbol: string): string { return symbol === "SPCX" ? "SPX" : symbol; }
+function getMarketCoin(symbol: string): string { return symbol === "SPCX" ? "xyz:SPCX" : symbol; }
 
 export async function getHoldingDashboardData(coin: string): Promise<HoldingDashboardData> {
   const cleanCoin = normalizePerpCoin(coin);
@@ -406,7 +406,8 @@ function getSpotCoin(symbol: string): string | null {
 }
 
 async function getGenericCrowdingData(marketCoin: string, market: DashboardData["hype"], orderFlow: DashboardData["orderFlow"], twaps: DashboardData["twaps"], rsi14: number | null, displayCoin = marketCoin): Promise<DashboardData["crowding"]> {
-  const raw = await postHyperliquid({ type: "metaAndAssetCtxs" });
+  const dex = dexForCoin(marketCoin);
+  const raw = await postHyperliquid({ type: "metaAndAssetCtxs", ...(dex ? { dex } : {}) });
   const [metaRaw, ctxsRaw] = z.tuple([z.record(z.unknown()), z.array(z.record(z.unknown()))]).parse(raw);
   const meta = z.array(z.record(z.unknown())).parse(metaRaw.universe);
   const index = meta.findIndex((row) => row.name === marketCoin);
