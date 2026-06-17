@@ -165,10 +165,10 @@ function CrowdingPanel({ data, onRange, range }: { data: DashboardData; onRange:
         <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3">
           <p className="mb-2 text-xs uppercase tracking-[0.18em] text-slate-500">Score weights</p>
           <CrowdingWeightRow label="OI/Funding crowding" metric={formatFundingMetric(crowding.metrics.weightedFunding)} score={crowding.breakdown.fundingOi} weight="35%" />
-          <CrowdingWeightRow label="Liquidation imbalance" metric={formatLiquidationMetric(crowding.metrics.liquidationImbalanceUsd)} note={crowding.metrics.liquidationImbalanceUsd === null ? "needs COINALYZE_API_KEY" : "1h realized long-short liqs"} score={crowding.breakdown.liquidation} weight="25%" />
+          <CrowdingWeightRow label="Liquidation imbalance" metric={formatLiquidationMetric(crowding.metrics.liquidationImbalanceUsd)} note={crowding.metrics.liquidationImbalanceUsd === null ? "needs COINALYZE_API_KEY" : "1h realized long-short liqs"} score={crowding.breakdown.liquidation} weight="20%" />
           <CrowdingWeightRow label="Price/OI trap behavior" metric={formatOiPriceMetric(crowding.metrics.oiChange24hPercent, crowding.metrics.priceChange24hPercent)} score={crowding.breakdown.oiPrice} weight="20%" />
           <CrowdingWeightRow label="Aggressive buyer/seller flow" metric={signedUsd(crowding.metrics.flowNetUsd)} score={crowding.breakdown.flow} weight="15%" />
-          <CrowdingWeightRow label="TWAP pressure" metric={signedUsd(crowding.metrics.twapPressure1hUsd)} score={crowding.breakdown.twap} weight="5%" />
+          <CrowdingWeightRow label="TWAP pressure" metric={signedUsd(crowding.metrics.twapPressure1hUsd)} score={crowding.breakdown.twap} weight="10%" />
           <div className="border-t border-slate-800/80 pt-2"><p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">RSI modifier</p><p className="mono mt-1 text-sm font-medium text-slate-400">{formatRsiModifier(crowding.metrics.rsi14, crowding.metrics.rsiModifier)}</p></div>
         </div>
       </div>

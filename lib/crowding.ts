@@ -39,9 +39,9 @@ export async function getCurrentCrowdingData(input: { hypePrice: number; orderFl
   const oiPriceScore = oiPriceCrowdingScore(oiChange24hPercent, input.priceChange1d, weightedFunding(venues));
   const flowScore = flowCrowdingScore(input.orderFlow);
   const twapScore = twapCrowdingScore(input.twaps, input.hypePrice, input.orderFlow);
-  const baseScore = clampScore(0.35 * oiFundingScore + 0.25 * liquidationScore + 0.2 * oiPriceScore + 0.15 * flowScore + 0.05 * twapScore);
+  const baseScore = clampScore(0.35 * oiFundingScore + 0.2 * liquidationScore + 0.2 * oiPriceScore + 0.15 * flowScore + 0.1 * twapScore);
   const positioningGateScore = 0.35 * oiFundingScore + 0.2 * oiPriceScore;
-  const flowGateScore = 0.25 * liquidationScore + 0.15 * flowScore + 0.05 * twapScore;
+  const flowGateScore = 0.2 * liquidationScore + 0.15 * flowScore + 0.1 * twapScore;
   const rsiModifier = rsiExhaustionModifier({ baseScore, flowGateScore, positioningGateScore, rsi: input.rsi14 });
   const score = clampScore(baseScore * rsiModifier);
   return {
