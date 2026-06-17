@@ -462,7 +462,14 @@ function Card({ title, action, children }: { title: string; action?: React.React
 function TwapRow({ twap }: { twap: LiveTwap }) {
   const sideTone = twap.side === "BUY" ? "text-emerald-300" : "text-rose-300";
   const progressTone = twap.side === "BUY" ? "bg-emerald-300" : "bg-rose-300";
-  return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><div className="mb-2 flex items-start justify-between gap-3"><div><span className={`mono text-xs font-semibold ${sideTone}`}>{twap.side}</span><p className="mono mt-1 text-sm text-slate-200">{twap.token}</p></div><div className="text-right"><p className="mono text-sm font-semibold transition-colors duration-300">{formatCompactUsd(twap.liveValue)}</p><p className="mono text-xs text-slate-500">{formatNumber(twap.amount)} {displayTwapUnit(twap.token)}</p></div></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-800"><div className={`h-full rounded-full transition-all duration-1000 ease-linear ${progressTone}`} style={{ width: `${Math.round(twap.liveProgress * 100)}%` }} /></div><div className="mt-2 flex justify-between gap-3 text-xs text-slate-500"><span className="mono">{shortAddress(twap.user)}</span><span>{formatDuration(twap.liveRemainingMs)} left</span></div></div>;
+  return <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3"><div className="mb-2 flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-1.5"><span className={`mono text-xs font-semibold ${sideTone}`}>{twap.side}</span><TwapVenueTag token={twap.token} /></div><p className="mono mt-1 text-sm text-slate-200">{twap.token}</p></div><div className="text-right"><p className="mono text-sm font-semibold transition-colors duration-300">{formatCompactUsd(twap.liveValue)}</p><p className="mono text-xs text-slate-500">{formatNumber(twap.amount)} {displayTwapUnit(twap.token)}</p></div></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-800"><div className={`h-full rounded-full transition-all duration-1000 ease-linear ${progressTone}`} style={{ width: `${Math.round(twap.liveProgress * 100)}%` }} /></div><div className="mt-2 flex justify-between gap-3 text-xs text-slate-500"><span className="mono">{shortAddress(twap.user)}</span><span>{formatDuration(twap.liveRemainingMs)} left</span></div></div>;
+}
+
+function TwapVenueTag({ token }: { token: string }) {
+  const isPerp = token.endsWith("-USD");
+  const label = isPerp ? "PERP" : "SPOT";
+  const tone = isPerp ? "border-sky-400/30 bg-sky-400/10 text-sky-200" : "border-emerald-400/30 bg-emerald-400/10 text-emerald-200";
+  return <span className={`mono rounded-full border px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.14em] ${tone}`}>{label}</span>;
 }
 
 function TwapStat({ label, tone, value }: { label: string; tone: string; value: string }) {
