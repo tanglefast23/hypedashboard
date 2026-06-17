@@ -102,6 +102,7 @@ function getSupabaseConfig(): SupabaseConfig | null {
 
 async function supabaseFetch(config: SupabaseConfig, path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${config.url}/rest/v1/${path}`, {
+    cache: "no-store",
     ...init,
     headers: { apikey: config.key, authorization: `Bearer ${config.key}`, "content-type": "application/json", ...(init.headers ?? {}) },
   });
