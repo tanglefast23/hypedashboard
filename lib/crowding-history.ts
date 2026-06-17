@@ -33,12 +33,12 @@ export async function getStoredCrowdingBars(asset = "HYPE"): Promise<Partial<Rec
     select: "snapshot_time,score,total_oi_usd",
     asset: `eq.${normalizeAsset(asset)}`,
     snapshot_time: `gte.${since}`,
-    order: "snapshot_time.asc",
+    order: "snapshot_time.desc",
     limit: "5000",
   });
   const response = await supabaseFetch(config, `${SNAPSHOT_TABLE}?${params}`);
   if (!response.ok) return null;
-  const rows = (await response.json() as Record<string, unknown>[]).map(parseSnapshotRow).filter(isSnapshotRow);
+  const rows = (await response.json() as Record<string, unknown>[]).map(parseSnapshotRow).filter(isSnapshotRow).reverse();
   if (rows.length < 2) return null;
   const bars = Object.fromEntries((Object.keys(RANGE_BUCKETS) as RangeId[]).flatMap((range) => {
     const rangeBars = buildRangeBars(rows, range);
