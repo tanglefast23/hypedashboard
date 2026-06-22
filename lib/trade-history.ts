@@ -30,8 +30,14 @@ export async function collectDashboardTrades(): Promise<{ inserted: number; ok: 
   const rows = collected.flat();
   if (rows.length === 0) return { inserted: 0, ok: true };
   await upsertTrades(config, rows);
-  await deleteOldTrades(config);
   return { inserted: rows.length, ok: true };
+}
+
+export async function pruneDashboardTrades(): Promise<{ deleted: number; ok: boolean; reason?: string }> {
+  const config = getSupabaseConfig();
+  if (!config) return { deleted: 0, ok: false, reason: "Supabase server env missing" };
+  const deleted = await deleteOldTrades(config);
+  return { deleted, ok: true };
 }
 
 async function collectAssetTradeRows(asset: string, perpCoin: string, spotCoin: string | null): Promise<Record<string, unknown>[]> {
@@ -124,9 +130,12 @@ async function upsertTrades(config: SupabaseConfig, rows: Record<string, unknown
   if (!response.ok) throw new Error(`Supabase upsert failed: ${response.status} ${await response.text()}`);
 }
 
-async function deleteOldTrades(config: SupabaseConfig): Promise<void> {
+async function deleteOldTrades(config: SupabaseConfig): Promise<number> {
   const response = await supabaseFetch(config, "rpc/hype_dashboard_delete_old_trades", { body: "{}", method: "POST" });
   if (!response.ok) throw new Error(`Supabase cleanup failed: ${response.status}`);
+  const value = await response.json().catch(() => 0) as unknown;
+  const deleted = Number(value);
+  return Number.isFinite(deleted) ? deleted : 0;
 }
 
 function normalizeTrades(raw: unknown[], venue: Venue, asset: string, coin: string): Record<string, unknown>[] {

@@ -23,7 +23,7 @@ A public, read-only, desktop-first dashboard for HYPE token flow and Hyperliquid
 
 ## Refresh / rate limits
 
-The dashboard refreshes every 30 seconds and Vercel caches `/api/dashboard` for 30 seconds with 90 seconds stale-while-revalidate. Trade timeframe taps also trigger an immediate `/api/dashboard` refresh with a cache-busting query string. Completed trade panels now collect Hyperliquid `recentTrades` into Supabase on each dashboard refresh and once per minute via Vercel Cron, then query Supabase history for the selected timeframe. Rows older than 31 days are deleted automatically.
+The dashboard refreshes every 30 seconds and Vercel caches `/api/dashboard` for 30 seconds with 90 seconds stale-while-revalidate. Trade timeframe taps also trigger an immediate `/api/dashboard` refresh with a cache-busting query string. Completed trade panels collect Hyperliquid `recentTrades` into Supabase once per minute via Hermes cron, then query Supabase history for the selected timeframe. Rows older than 30 hours are pruned every 30 minutes by a separate Hermes cron job.
 
 ## Local development
 

@@ -39,7 +39,7 @@ declare
   deleted_count integer;
 begin
   delete from public.hype_dashboard_trades
-  where trade_time < now() - interval '31 days';
+  where trade_time < now() - interval '30 hours';
   get diagnostics deleted_count = row_count;
   return deleted_count;
 end;
