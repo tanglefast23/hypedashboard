@@ -43,7 +43,7 @@ export function HoldingDashboard({ initialData }: { initialData: HoldingDashboar
 async function refresh(coin: string, setStatus: React.Dispatch<React.SetStateAction<Status>>) {
   setStatus((current) => ({ ...current, loading: true, error: null }));
   try {
-    const response = await fetch(`/api/holding?coin=${encodeURIComponent(coin)}&t=${Date.now()}`, { cache: "no-store" });
+    const response = await fetch(`/api/holding?coin=${encodeURIComponent(coin)}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`Holding refresh failed: ${response.status}`);
     const data = await response.json() as HoldingDashboardData;
     setStatus({ data, error: null, loading: false });

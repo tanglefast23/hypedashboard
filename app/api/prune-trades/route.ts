@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { pruneCrowdingSnapshots } from "../../../lib/crowding-history";
 import { pruneDashboardTrades } from "../../../lib/trade-history";
 
 export async function GET(request: NextRequest) {
@@ -7,8 +8,8 @@ export async function GET(request: NextRequest) {
   if (secret && auth !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const trades = await pruneDashboardTrades();
-    return NextResponse.json({ trades, prunedAt: new Date().toISOString() });
+    const [trades, crowding] = await Promise.all([pruneDashboardTrades(), pruneCrowdingSnapshots()]);
+    return NextResponse.json({ trades, crowding, prunedAt: new Date().toISOString() });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown prune error";
     return NextResponse.json({ error: message }, { status: 502 });

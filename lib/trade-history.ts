@@ -64,14 +64,14 @@ function getSupabaseConfig(): SupabaseConfig | null {
 
 async function buildStoredVenueFlow(config: SupabaseConfig, asset: string, venue: Venue): Promise<VenueFlow> {
   const now = Date.now();
-  const entries = await Promise.all(FLOW_TIMEFRAMES.map(async (frame) => [frame.id, await getFrameMarketFlow(config, asset, venue, frame.durationMs, now)] as const));
-  const fillEntries = await Promise.all(FLOW_TIMEFRAMES.map(async (frame) => [frame.id, await getFrameTrades(config, asset, venue, frame.durationMs, now)] as const));
-  const marketTrades = Object.fromEntries(entries) as VenueFlow["marketTrades"];
-  const limitFills = Object.fromEntries(fillEntries.map(([id, trades]) => [id, buildLimitFillFlow(trades, Number.POSITIVE_INFINITY, now)])) as VenueFlow["limitFills"];
-  return { marketTrades, limitFills };
+  const frames = await Promise.all(FLOW_TIMEFRAMES.map(async (frame) => [frame.id, await getFrameFlows(config, asset, venue, frame.durationMs, now)] as const));
+  return {
+    marketTrades: Object.fromEntries(frames.map(([id, flows]) => [id, flows.marketFlow])) as VenueFlow["marketTrades"],
+    limitFills: Object.fromEntries(frames.map(([id, flows]) => [id, buildLimitFillFlow(flows.trades, Number.POSITIVE_INFINITY, now)])) as VenueFlow["limitFills"],
+  };
 }
 
-async function getFrameMarketFlow(config: SupabaseConfig, asset: string, venue: Venue, durationMs: number, now: number): Promise<MarketFlow> {
+async function getFrameFlows(config: SupabaseConfig, asset: string, venue: Venue, durationMs: number, now: number): Promise<{ marketFlow: MarketFlow; trades: StoredTrade[] }> {
   const since = new Date(now - durationMs).toISOString();
   const [buys, sells, buyUsd, sellUsd] = await Promise.all([
     queryTopFrameSide(config, asset, venue, "B", since),
@@ -79,20 +79,7 @@ async function getFrameMarketFlow(config: SupabaseConfig, asset: string, venue: 
     queryFrameSideTotal(config, asset, venue, "B", since),
     queryFrameSideTotal(config, asset, venue, "A", since),
   ]);
-  return { buyUsd, buys, netUsd: buyUsd - sellUsd, sellUsd, sells };
-}
-
-async function getFrameTrades(config: SupabaseConfig, asset: string, venue: Venue, durationMs: number, now: number): Promise<StoredTrade[]> {
-  const since = new Date(now - durationMs).toISOString();
-  const [buys, sells] = await Promise.all([
-    queryFrameSide(config, asset, venue, "B", since),
-    queryFrameSide(config, asset, venue, "A", since),
-  ]);
-  return [...buys, ...sells];
-}
-
-async function queryFrameSide(config: SupabaseConfig, asset: string, venue: Venue, side: TradeSide, since: string): Promise<StoredTrade[]> {
-  return queryTopFrameSide(config, asset, venue, side, since);
+  return { marketFlow: { buyUsd, buys, netUsd: buyUsd - sellUsd, sellUsd, sells }, trades: [...buys, ...sells] };
 }
 
 async function queryTopFrameSide(config: SupabaseConfig, asset: string, venue: Venue, side: TradeSide, since: string): Promise<StoredTrade[]> {
