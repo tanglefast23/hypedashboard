@@ -62,7 +62,7 @@ export function Dashboard({ initialData }: Props) {
 async function refresh(symbol: string, setStatus: React.Dispatch<React.SetStateAction<Status>>) {
   setStatus((current) => ({ ...current, loading: true, error: null }));
   try {
-    const response = await fetch(`/api/dashboard?coin=${encodeURIComponent(symbol)}&t=${Date.now()}`, { cache: "no-store" });
+    const response = await fetch(`/api/dashboard?coin=${encodeURIComponent(symbol)}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`Dashboard refresh failed: ${response.status}`);
     const data = await response.json() as DashboardData;
     setStatus({ data, error: null, loading: false });
